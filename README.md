@@ -86,16 +86,32 @@ This project demonstrates real-world machine learning engineering skills includi
 datapilot-ai/
 │
 ├── app.py # Main Streamlit application
+
+
 ├── src/
+
+
 │ ├── automl.py # Training, tuning, imbalance handling
+
+
 │ ├── pipeline.py # Feature engineering pipeline
+
+
 │ ├── data_loader.py # CSV loading
+
+
 │ ├── eda.py # Visualization utilities
+
+
 │ ├── model_registry.py # Model version tracking
+
 │ └── data_quality.py # Dataset health scoring
+
 │
 ├── models/ # Saved trained models
+
 ├── requirements.txt
+
 └── README.md
 
 
