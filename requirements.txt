@@ -1,8 +1,11 @@
 streamlit
 pandas
 numpy
-matplotlib
-plotly
 scikit-learn
-python-dotenv
-openai
+matplotlib
+seaborn
+joblib
+xgboost
+lightgbm
+catboost
+shap
