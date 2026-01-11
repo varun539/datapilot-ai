@@ -4,7 +4,7 @@
 > **End-to-End AutoML Platform for Rapid Machine Learning Development**  
 > Built by **Varun B**
 >
-> live link ====[ https://varun-datapilot-ai.streamlit.app/ ]
+> live link -[ https://varun-datapilot-ai.streamlit.app/ ]
 
 DataPilot AI is a production-ready AutoML web application that allows users to upload datasets, automatically train ML models, analyze data, explain predictions, tune hyperparameters, manage model versions, and deploy predictions — all from a clean Streamlit interface.
 
