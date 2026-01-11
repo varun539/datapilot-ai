@@ -80,7 +80,12 @@ if "X" not in st.session_state:
 st.title("🚀 Varun's DataPilot AI")
 st.caption("Built by Varun B — Production AutoML Platform")
 
-uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
+uploaded_file = st.file_uploader(
+    "Upload CSV",
+    type=["csv"],
+    key="main_csv_upload"
+)
+
 
 # ======================================================
 # LOAD DATA
@@ -413,7 +418,14 @@ elif page == "🔮 Prediction":
 
         # ---- Batch ----
         else:
-            batch_file = st.file_uploader("Upload CSV", type=["csv"])
+        
+
+            batch_file = st.file_uploader(
+            "Upload CSV for Batch Prediction",
+            type=["csv"],
+             key="batch_csv_upload"
+            )
+
             if batch_file:
                 batch_df = load_cached_csv(batch_file)
 
