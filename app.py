@@ -152,9 +152,30 @@ elif page == "🤖 AutoML":
 
     st.header("🤖 Automated Machine Learning")
 
-    numeric_cols = profile["numeric_cols"]
-    target_col = st.selectbox("🎯 Select Target Column", numeric_cols)
+    # numeric_cols = profile["numeric_cols"]
+    # target_col = st.selectbox("🎯 Select Target Column", numeric_cols)
+    # st.session_state.target_col = target_col
+
+    # ✅ Allow numeric + convertible columns
+     candidate_targets = []
+
+    for col in df.columns:
+    try:
+        pd.to_numeric(df[col])
+        candidate_targets.append(col)
+    except:
+        pass
+
+    target_col = st.selectbox("🎯 Select Target Column", candidate_targets)
     st.session_state.target_col = target_col
+
+
+
+
+
+
+    
+    
 
     st.session_state.handle_imbalance = st.checkbox(
         "⚖️ Handle Class Imbalance Automatically (Class Weights)",
