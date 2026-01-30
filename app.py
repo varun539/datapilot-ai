@@ -190,76 +190,193 @@ elif page == "🤖 AutoML":
 # ======================================================
 # EXPLAINABILITY
 # ======================================================
-elif page == "🧠 Explainability":
-    st.header("Model Explainability")
+# elif page == "🧠 Explainability":
+#     st.header("Model Explainability")
 
-    if st.session_state.X is None:
-        st.warning("Train a model first")
-        st.stop()
+#     if st.session_state.X is None:
+#         st.warning("Train a model first")
+#         st.stop()
 
-    import shap
+#     import shap
 
-    model = joblib.load("models/best_model.pkl")
+#     model = joblib.load("models/best_model.pkl")
 
-    X_sample = (
-        st.session_state.X
-        .sample(min(200, len(st.session_state.X)))
-        .apply(pd.to_numeric, errors="coerce")
-        .fillna(0)
-        .values.astype(np.float32)
-    )
+#     X_sample = (
+#         st.session_state.X
+#         .sample(min(200, len(st.session_state.X)))
+#         .apply(pd.to_numeric, errors="coerce")
+#         .fillna(0)
+#         .values.astype(np.float32)
+#     )
 
-    explainer = shap.Explainer(model, X_sample)
-    shap_values = explainer(X_sample)
+#     explainer = shap.Explainer(model, X_sample)
+#     shap_values = explainer(X_sample)
 
-    fig = plt.figure(figsize=(10, 5))
-    shap.summary_plot(shap_values, X_sample, show=False)
-    st.pyplot(fig)
+#     fig = plt.figure(figsize=(10, 5))
+#     shap.summary_plot(shap_values, X_sample, show=False)
+#     st.pyplot(fig)
+
+
 
 # ======================================================
-# PREDICTION
+# 🧠 EXPLAINABILITY (SHAP — FIXED)
+# ======================================================
+elif page == "🧠 Explainability":
+
+    st.header("🧠 Model Explainability (SHAP)")
+
+    try:
+        import shap
+
+        model = joblib.load("models/best_model.pkl")
+
+        # 👉 Sample data
+        X_sample_df = st.session_state.X.sample(
+            min(200, len(st.session_state.X)),
+            random_state=42
+        ).copy()
+
+        # 👉 Force numeric safety
+        X_sample_df = X_sample_df.apply(
+            pd.to_numeric,
+            errors="coerce"
+        ).fillna(0)
+
+        st.success("✅ SHAP sample prepared")
+
+        # 👉 KEEP AS DATAFRAME (VERY IMPORTANT)
+        explainer = shap.Explainer(model, X_sample_df)
+        shap_values = explainer(X_sample_df)
+
+        fig = plt.figure(figsize=(10, 5))
+        shap.summary_plot(
+            shap_values,
+            X_sample_df,
+            show=False
+        )
+
+        st.pyplot(fig, use_container_width=True)
+
+    except Exception as e:
+        st.error("❌ SHAP failed")
+        st.code(str(e))
+
+
+
+
+
+
+
+
+
+# ======================================================
+# 🔮 PREDICTION
 # ======================================================
 elif page == "🔮 Prediction":
-    st.header("Prediction")
 
-    if not os.path.exists("models/best_model.pkl"):
-        st.warning("Train a model first")
-        st.stop()
+    st.header("🔮 Prediction")
 
-    model = joblib.load("models/best_model.pkl")
-    schema = joblib.load("models/feature_schema.pkl")
+    try:
+        model = joblib.load("models/best_model.pkl")
+        feature_schema = joblib.load("models/feature_schema.pkl")
 
-    mode = st.radio("Mode", ["Single", "Batch"])
+        mode = st.radio(
+            "Prediction Mode",
+            ["Single Prediction", "Batch CSV Prediction"]
+        )
 
-    if mode == "Single":
-        inputs = {c: st.number_input(c, 0.0) for c in schema}
-        if st.button("Predict"):
-            df_in = pd.DataFrame([inputs])
-            X_pred = prepare_features(
-                df_raw=df_in,
-                profile=profile,
-                training=False,
-                feature_schema=schema
+        # =====================================
+        # 🧍 SINGLE PREDICTION
+        # =====================================
+        if mode == "Single Prediction":
+
+            st.subheader("🧍 Single Prediction")
+
+            # 👉 ONE date picker for humans
+            user_date = st.date_input("📅 Select Date")
+
+            # 👉 Exclude engineered date features from UI
+            safe_cols = [
+                c for c in feature_schema
+                if not c.startswith("Date_")
+            ]
+
+            user_input = {}
+
+            for col in safe_cols:
+                user_input[col] = st.number_input(col, value=0.0)
+
+            # 👉 Backend date engineering (MODEL SEES THIS)
+            date_features = {
+                "Date_year": user_date.year,
+                "Date_month": user_date.month,
+                "Date_day": user_date.day,
+                "Date_dayofweek": user_date.weekday(),
+                "Date_is_weekend": int(user_date.weekday() >= 5)
+            }
+
+            user_input.update(date_features)
+
+            if st.button("🎯 Predict"):
+
+                raw_df = pd.DataFrame([user_input])
+
+                X_pred = prepare_features(
+                    df_raw=raw_df,
+                    profile=profile,
+                    training=False,
+                    feature_schema=feature_schema
+                )
+
+                prediction = model.predict(X_pred)[0]
+                st.success(f"📈 Prediction Result: {prediction}")
+
+        # =====================================
+        # 📦 BATCH PREDICTION
+        # =====================================
+        else:
+
+            st.subheader("📦 Batch Prediction")
+
+            batch_file = st.file_uploader(
+                "Upload CSV for Batch Prediction",
+                type=["csv"],
+                key="batch_prediction_upload"
             )
-            st.success(f"Prediction: {model.predict(X_pred)[0]}")
 
-    else:
-        batch = st.file_uploader("Upload batch CSV", type=["csv"], key="batch")
-        if batch:
-            batch_df = load_cached_csv(batch)
-            X_batch = prepare_features(
-                df_raw=batch_df,
-                profile=profile,
-                training=False,
-                feature_schema=schema
-            )
-            batch_df["prediction"] = model.predict(X_batch)
-            st.dataframe(batch_df.head())
-            st.download_button(
-                "Download Predictions",
-                batch_df.to_csv(index=False).encode(),
-                "predictions.csv"
-            )
+            if batch_file:
+                batch_df = load_cached_csv(batch_file)
+
+                X_batch = prepare_features(
+                    df_raw=batch_df,
+                    profile=profile,
+                    training=False,
+                    feature_schema=feature_schema
+                )
+
+                preds = model.predict(X_batch)
+                batch_df["prediction"] = preds
+
+                st.dataframe(batch_df.head(20), use_container_width=True)
+
+                csv = batch_df.to_csv(index=False).encode("utf-8")
+                st.download_button(
+                    "⬇️ Download Predictions",
+                    csv,
+                    "predictions.csv"
+                )
+
+    except Exception as e:
+        st.warning("⚠️ Train a model first.")
+        st.code(str(e))
+
+
+
+
+
+
+
+
 
 # ======================================================
 # MODEL REGISTRY
