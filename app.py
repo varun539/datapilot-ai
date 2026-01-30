@@ -220,7 +220,48 @@ elif page == "🤖 AutoML":
 
 # ======================================================
 # 🧠 EXPLAINABILITY (SHAP — FIXED)
-# ======================================================
+# # ======================================================
+# elif page == "🧠 Explainability":
+
+#     st.header("🧠 Model Explainability (SHAP)")
+
+#     try:
+#         import shap
+
+#         model = joblib.load("models/best_model.pkl")
+
+#         # 👉 Sample data
+#         X_sample_df = st.session_state.X.sample(
+#             min(200, len(st.session_state.X)),
+#             random_state=42
+#         ).copy()
+
+#         # 👉 Force numeric safety
+#         X_sample_df = X_sample_df.apply(
+#             pd.to_numeric,
+#             errors="coerce"
+#         ).fillna(0)
+
+#         st.success("✅ SHAP sample prepared")
+
+#         # 👉 KEEP AS DATAFRAME (VERY IMPORTANT)
+#         explainer = shap.Explainer(model, X_sample_df)
+#         shap_values = explainer(X_sample_df)
+
+#         fig = plt.figure(figsize=(10, 5))
+#         shap.summary_plot(
+#             shap_values,
+#             X_sample_df,
+#             show=False
+#         )
+
+#         st.pyplot(fig, use_container_width=True)
+
+#     except Exception as e:
+#         st.error("❌ SHAP failed")
+#         st.code(str(e))
+
+
 elif page == "🧠 Explainability":
 
     st.header("🧠 Model Explainability (SHAP)")
@@ -230,38 +271,43 @@ elif page == "🧠 Explainability":
 
         model = joblib.load("models/best_model.pkl")
 
-        # 👉 Sample data
+        # Take safe sample
         X_sample_df = st.session_state.X.sample(
             min(200, len(st.session_state.X)),
             random_state=42
         ).copy()
 
-        # 👉 Force numeric safety
+        # Force numeric safety
         X_sample_df = X_sample_df.apply(
-            pd.to_numeric,
-            errors="coerce"
+            pd.to_numeric, errors="coerce"
         ).fillna(0)
 
         st.success("✅ SHAP sample prepared")
 
-        # 👉 KEEP AS DATAFRAME (VERY IMPORTANT)
-        explainer = shap.Explainer(model, X_sample_df)
-        shap_values = explainer(X_sample_df)
+        # 🔥 IMPORTANT FIX — use TreeExplainer explicitly
+        explainer = shap.TreeExplainer(model)
+        shap_values = explainer.shap_values(X_sample_df)
+
+        # =============================
+        # Regression OR Binary Class
+        # =============================
+        if isinstance(shap_values, list):
+            shap_values_to_plot = shap_values[1]  # positive class
+        else:
+            shap_values_to_plot = shap_values
 
         fig = plt.figure(figsize=(10, 5))
         shap.summary_plot(
-            shap_values,
+            shap_values_to_plot,
             X_sample_df,
             show=False
         )
 
-        st.pyplot(fig, use_container_width=True)
+        st.pyplot(fig)
 
     except Exception as e:
         st.error("❌ SHAP failed")
         st.code(str(e))
-
-
 
 
 
