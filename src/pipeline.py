@@ -56,10 +56,18 @@ def prepare_features(
 
             df[f"{col}_year"] = df[col].dt.year
             df[f"{col}_month"] = df[col].dt.month
-            df[f"{col}_week"] = df[col].dt.isocalendar().week.astype("int")
+
+             df[f"{col}_week"] = (
+            df[col]
+            .dt.isocalendar()
+            .week
+            .astype("Int64")   # ✅ SAFE nullable integer
+                           )
+            
             df[f"{col}_day"] = df[col].dt.day
             df[f"{col}_dayofweek"] = df[col].dt.dayofweek
             df[f"{col}_is_weekend"] = df[col].dt.dayofweek.isin([5, 6]).astype(int)
+
 
     # Drop raw datetime columns
     df.drop(columns=datetime_cols, errors="ignore", inplace=True)
