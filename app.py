@@ -165,6 +165,19 @@ elif page == "🤖 AutoML":
             problem_type = detect_problem_type(y)
             st.session_state.problem_type = problem_type
 
+           # 🕒 Detect Training Mode
+            training_mode = detect_training_mode(
+                df=df,
+                target_col=target_col,
+                profile=profile
+            )
+            
+            st.session_state.training_mode = training_mode
+
+             if training_mode == "time_series":
+                    st.info("🕒 Time Series Mode Enabled")
+              else:
+                    st.info("📊 Standard ML Mode Enabled")
             if problem_type == "classification":
                 is_imb, ratio = detect_class_imbalance(y)
                 if is_imb:
