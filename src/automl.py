@@ -284,7 +284,6 @@ def tune_best_model(model, X, y, problem_type):
         round(search.best_score_, 4)
     )
 
-
 # ======================================================
 # ⚠️ Class Imbalance Detector
 # ======================================================
@@ -299,3 +298,37 @@ def detect_class_imbalance(y, threshold=0.75):
         return True, round(majority_ratio, 3)
 
     return False, round(majority_ratio, 3)
+
+
+
+# ======================================================
+# ⚠️ DATA LEAKAGE GUARD
+# ======================================================
+def detect_data_leakage(X, y, threshold=0.98):
+    """
+    Detects potential data leakage using correlation with target.
+    Returns:
+        (is_leakage, leaked_features)
+    """
+
+    leakage_features = []
+
+    # Only numeric features are checked
+    X_numeric = X.select_dtypes(include=["number"])
+
+    for col in X_numeric.columns:
+        try:
+            corr = np.corrcoef(X_numeric[col], y)[0, 1]
+            if abs(corr) >= threshold:
+                leakage_features.append((col, round(corr, 4)))
+        except Exception:
+            continue
+
+    if leakage_features:
+        return True, leakage_features
+
+    return False, []
+
+
+
+
