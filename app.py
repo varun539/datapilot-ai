@@ -13,15 +13,15 @@ from src.data_loader import load_csv
 from src.eda import (
     basic_profile,
     plot_numeric_distributions,
-    plot_correlation_heatmap,
-    plot_categorical_counts
+    plot_correlation_heatmap
 )
 from src.automl import (
     detect_problem_type,
     train_models,
     tune_best_model,
     detect_class_imbalance,
-    detect_training_mode  
+    detect_training_mode,
+    detect_data_leakage
 )
 from src.data_quality import calculate_data_quality
 from src.model_registry import register_model, get_all_models
@@ -42,7 +42,7 @@ def load_cached_csv(file):
 # SIDEBAR
 # ======================================================
 st.sidebar.title("🚀 Varun's DataPilot AI")
-st.sidebar.caption("End-to-End AutoML Platform")
+st.sidebar.caption("Production AutoML Platform")
 
 page = st.sidebar.radio(
     "Navigate",
@@ -60,18 +60,17 @@ page = st.sidebar.radio(
 # ======================================================
 # SESSION STATE
 # ======================================================
-if "X" not in st.session_state:
-    st.session_state.X = None
-    st.session_state.y = None
-    st.session_state.problem_type = None
-    st.session_state.target_col = None
-    st.session_state.handle_imbalance = True
+for key in ["X", "y", "problem_type", "target_col", "training_mode"]:
+    if key not in st.session_state:
+        st.session_state[key] = None
+
+st.session_state.setdefault("handle_imbalance", True)
 
 # ======================================================
 # HEADER
 # ======================================================
 st.title("🚀 Varun's DataPilot AI")
-st.caption("Production AutoML Platform")
+st.caption("End-to-End AutoML Platform")
 
 uploaded_file = st.file_uploader(
     "Upload CSV",
@@ -79,9 +78,6 @@ uploaded_file = st.file_uploader(
     key="main_upload"
 )
 
-# ======================================================
-# LOAD DATA
-# ======================================================
 if not uploaded_file:
     st.info("Upload a CSV to begin")
     st.stop()
@@ -127,7 +123,6 @@ elif page == "📈 Visual Analytics":
 elif page == "🤖 AutoML":
     st.header("Automated Machine Learning")
 
-    # ✅ NUMERIC-CONVERTIBLE TARGETS
     candidate_targets = []
     for col in df.columns:
         try:
@@ -156,6 +151,14 @@ elif page == "🤖 AutoML":
 
             y = pd.to_numeric(df[target_col], errors="coerce").fillna(df[target_col].median())
 
+            # ⚠️ DATA LEAKAGE GUARD
+            is_leakage, leaked_feats = detect_data_leakage(X, y)
+            if is_leakage:
+                st.error("⚠️ Possible data leakage detected. Training stopped.")
+                for f, c in leaked_feats:
+                    st.write(f"🔴 {f} → corr = {c}")
+                st.stop()
+
             st.session_state.X = X
             st.session_state.y = y
 
@@ -165,286 +168,126 @@ elif page == "🤖 AutoML":
             problem_type = detect_problem_type(y)
             st.session_state.problem_type = problem_type
 
-           # 🕒 Detect Training Mode
-            training_mode = detect_training_mode(
-                df=df,
-                target_col=target_col,
-                profile=profile
-            )
-            
+            training_mode = detect_training_mode(df, target_col, profile)
             st.session_state.training_mode = training_mode
 
-             if training_mode == "time_series":
-                    st.info("🕒 Time Series Mode Enabled")
-              else:
-                    st.info("📊 Standard ML Mode Enabled")
+            st.info(
+                "🕒 Time Series Mode Enabled"
+                if training_mode == "time_series"
+                else "📊 Standard ML Mode Enabled"
+            )
+
             if problem_type == "classification":
                 is_imb, ratio = detect_class_imbalance(y)
                 if is_imb:
                     st.warning(f"Imbalanced data detected ({ratio*100:.1f}% majority)")
 
-            results_df, best_model = train_models(
+            results_df, best_model_name = train_models(
                 X,
                 y,
                 problem_type,
                 handle_imbalance=st.session_state.handle_imbalance
             )
 
-            st.success(f"Best Model: {best_model}")
+            st.success(f"🏆 Best Model: {best_model_name}")
             st.dataframe(results_df, use_container_width=True)
 
             register_model(
                 model_path="models/best_model.pkl",
-                model_name=best_model,
+                model_name=best_model_name,
                 cv_score=0.0,
                 feature_count=X.shape[1],
                 best_params={}
             )
 
 # ======================================================
-# EXPLAINABILITY
+# SHAP EXPLAINABILITY (SAFE)
 # ======================================================
-# elif page == "🧠 Explainability":
-#     st.header("Model Explainability")
-
-#     if st.session_state.X is None:
-#         st.warning("Train a model first")
-#         st.stop()
-
-#     import shap
-
-#     model = joblib.load("models/best_model.pkl")
-
-#     X_sample = (
-#         st.session_state.X
-#         .sample(min(200, len(st.session_state.X)))
-#         .apply(pd.to_numeric, errors="coerce")
-#         .fillna(0)
-#         .values.astype(np.float32)
-#     )
-
-#     explainer = shap.Explainer(model, X_sample)
-#     shap_values = explainer(X_sample)
-
-#     fig = plt.figure(figsize=(10, 5))
-#     shap.summary_plot(shap_values, X_sample, show=False)
-#     st.pyplot(fig)
-
-
-
-# ======================================================
-# 🧠 EXPLAINABILITY (SHAP — FIXED)
-# # ======================================================
-# elif page == "🧠 Explainability":
-
-#     st.header("🧠 Model Explainability (SHAP)")
-
-#     try:
-#         import shap
-
-#         model = joblib.load("models/best_model.pkl")
-
-#         # 👉 Sample data
-#         X_sample_df = st.session_state.X.sample(
-#             min(200, len(st.session_state.X)),
-#             random_state=42
-#         ).copy()
-
-#         # 👉 Force numeric safety
-#         X_sample_df = X_sample_df.apply(
-#             pd.to_numeric,
-#             errors="coerce"
-#         ).fillna(0)
-
-#         st.success("✅ SHAP sample prepared")
-
-#         # 👉 KEEP AS DATAFRAME (VERY IMPORTANT)
-#         explainer = shap.Explainer(model, X_sample_df)
-#         shap_values = explainer(X_sample_df)
-
-#         fig = plt.figure(figsize=(10, 5))
-#         shap.summary_plot(
-#             shap_values,
-#             X_sample_df,
-#             show=False
-#         )
-
-#         st.pyplot(fig, use_container_width=True)
-
-#     except Exception as e:
-#         st.error("❌ SHAP failed")
-#         st.code(str(e))
-
-
 elif page == "🧠 Explainability":
+    st.header("🧠 Model Explainability")
 
-    st.header("🧠 Model Explainability (SHAP)")
+    if st.session_state.X is None:
+        st.warning("Train a model first")
+        st.stop()
+
+    import shap
+    model = joblib.load("models/best_model.pkl")
+
+    X_sample = (
+        st.session_state.X
+        .sample(min(200, len(st.session_state.X)), random_state=42)
+        .apply(pd.to_numeric, errors="coerce")
+        .fillna(0)
+    )
 
     try:
-        import shap
-
-        model = joblib.load("models/best_model.pkl")
-
-        # Take safe sample
-        X_sample_df = st.session_state.X.sample(
-            min(200, len(st.session_state.X)),
-            random_state=42
-        ).copy()
-
-        # Force numeric safety
-        X_sample_df = X_sample_df.apply(
-            pd.to_numeric, errors="coerce"
-        ).fillna(0)
-
-        st.success("✅ SHAP sample prepared")
-
-        # 🔥 IMPORTANT FIX — use TreeExplainer explicitly
         explainer = shap.TreeExplainer(model)
-        shap_values = explainer.shap_values(X_sample_df)
+        shap_values = explainer.shap_values(X_sample)
+        shap_to_plot = shap_values[1] if isinstance(shap_values, list) else shap_values
+    except:
+        explainer = shap.Explainer(model, X_sample)
+        shap_to_plot = explainer(X_sample)
 
-        # =============================
-        # Regression OR Binary Class
-        # =============================
-        if isinstance(shap_values, list):
-            shap_values_to_plot = shap_values[1]  # positive class
-        else:
-            shap_values_to_plot = shap_values
-
-        fig = plt.figure(figsize=(10, 5))
-        shap.summary_plot(
-            shap_values_to_plot,
-            X_sample_df,
-            show=False
-        )
-
-        st.pyplot(fig)
-
-    except Exception as e:
-        st.error("❌ SHAP failed")
-        st.code(str(e))
-
-
-
-
-
-
+    fig = plt.figure(figsize=(10, 5))
+    shap.summary_plot(shap_to_plot, X_sample, show=False)
+    st.pyplot(fig)
 
 # ======================================================
-# 🔮 PREDICTION
+# PREDICTION
 # ======================================================
 elif page == "🔮 Prediction":
+    st.header("Prediction")
 
-    st.header("🔮 Prediction")
+    model = joblib.load("models/best_model.pkl")
+    feature_schema = joblib.load("models/feature_schema.pkl")
 
-    try:
-        model = joblib.load("models/best_model.pkl")
-        feature_schema = joblib.load("models/feature_schema.pkl")
+    mode = st.radio("Mode", ["Single Prediction", "Batch Prediction"])
 
-        mode = st.radio(
-            "Prediction Mode",
-            ["Single Prediction", "Batch CSV Prediction"]
-        )
+    if mode == "Single Prediction":
+        user_date = st.date_input("📅 Select Date")
 
-        # =====================================
-        # 🧍 SINGLE PREDICTION
-        # =====================================
-        if mode == "Single Prediction":
+        base_numeric_cols = [
+            c for c in profile["numeric_cols"]
+            if c != st.session_state.target_col
+        ]
 
-            st.subheader("🧍 Single Prediction")
+        user_input = {col: st.number_input(col, 0.0) for col in base_numeric_cols}
 
-            # 👉 ONE date picker for humans
-            user_date = st.date_input("📅 Select Date")
+        user_input.update({
+            "Date_year": user_date.year,
+            "Date_month": user_date.month,
+            "Date_day": user_date.day,
+            "Date_dayofweek": user_date.weekday(),
+            "Date_is_weekend": int(user_date.weekday() >= 5)
+        })
 
-            # 👉 Exclude engineered date features from UI
-            safe_cols = [
-                c for c in feature_schema
-                if not c.startswith("Date_")
-            ]
-
-            user_input = {}
-
-            for col in safe_cols:
-                user_input[col] = st.number_input(col, value=0.0)
-
-            # 👉 Backend date engineering (MODEL SEES THIS)
-            date_features = {
-                "Date_year": user_date.year,
-                "Date_month": user_date.month,
-                "Date_day": user_date.day,
-                "Date_dayofweek": user_date.weekday(),
-                "Date_is_weekend": int(user_date.weekday() >= 5)
-            }
-
-            user_input.update(date_features)
-
-            if st.button("🎯 Predict"):
-
-                raw_df = pd.DataFrame([user_input])
-
-                X_pred = prepare_features(
-                    df_raw=raw_df,
-                    profile=profile,
-                    training=False,
-                    feature_schema=feature_schema
-                )
-
-                prediction = model.predict(X_pred)[0]
-                st.success(f"📈 Prediction Result: {prediction}")
-
-        # =====================================
-        # 📦 BATCH PREDICTION
-        # =====================================
-        else:
-
-            st.subheader("📦 Batch Prediction")
-
-            batch_file = st.file_uploader(
-                "Upload CSV for Batch Prediction",
-                type=["csv"],
-                key="batch_prediction_upload"
+        if st.button("Predict"):
+            raw_df = pd.DataFrame([user_input])
+            X_pred = prepare_features(
+                raw_df, profile, training=False, feature_schema=feature_schema
             )
+            st.success(f"Prediction: {model.predict(X_pred)[0]}")
 
-            if batch_file:
-                batch_df = load_cached_csv(batch_file)
-
-                X_batch = prepare_features(
-                    df_raw=batch_df,
-                    profile=profile,
-                    training=False,
-                    feature_schema=feature_schema
-                )
-
-                preds = model.predict(X_batch)
-                batch_df["prediction"] = preds
-
-                st.dataframe(batch_df.head(20), use_container_width=True)
-
-                csv = batch_df.to_csv(index=False).encode("utf-8")
-                st.download_button(
-                    "⬇️ Download Predictions",
-                    csv,
-                    "predictions.csv"
-                )
-
-    except Exception as e:
-        st.warning("⚠️ Train a model first.")
-        st.code(str(e))
-
-
-
-
-
-
-
-
+    else:
+        batch_file = st.file_uploader("Upload CSV", type=["csv"], key="batch_upload")
+        if batch_file:
+            batch_df = load_cached_csv(batch_file)
+            X_batch = prepare_features(
+                batch_df, profile, training=False, feature_schema=feature_schema
+            )
+            batch_df["prediction"] = model.predict(X_batch)
+            st.dataframe(batch_df.head())
+            st.download_button(
+                "Download Predictions",
+                batch_df.to_csv(index=False),
+                "predictions.csv"
+            )
 
 # ======================================================
 # MODEL REGISTRY
 # ======================================================
 elif page == "📦 Model Registry":
-    st.header("Model Registry")
-    df_reg = pd.DataFrame(get_all_models())
-    st.dataframe(df_reg, use_container_width=True)
+    st.dataframe(pd.DataFrame(get_all_models()), use_container_width=True)
 
 # ======================================================
 # DOWNLOADS
@@ -453,4 +296,3 @@ elif page == "⬇️ Downloads":
     if os.path.exists("models/best_model.pkl"):
         with open("models/best_model.pkl", "rb") as f:
             st.download_button("Download Model", f, "best_model.pkl")
- 
