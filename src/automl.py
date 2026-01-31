@@ -30,6 +30,33 @@ from catboost import CatBoostRegressor, CatBoostClassifier
 
 
 # ======================================================
+# 🕒 AUTO MODE DETECTION
+# ======================================================
+def detect_training_mode(df, target_col, profile):
+    """
+    Detect whether dataset should be treated as:
+    - Time Series
+    - Standard ML
+    """
+
+    datetime_cols = profile.get("datetime_cols", [])
+
+    # No datetime column → normal ML
+    if not datetime_cols:
+        return "standard"
+
+    # If target changes over time → time series
+    for date_col in datetime_cols:
+        if date_col in df.columns and target_col in df.columns:
+            temp = df[[date_col, target_col]].dropna()
+
+            # Must have enough unique dates
+            if temp[date_col].nunique() > 10:
+                return "time_series"
+
+    return "standard"
+
+# ======================================================
 # Detect Problem Type
 # ======================================================
 def detect_problem_type(y):
