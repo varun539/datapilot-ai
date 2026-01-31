@@ -20,7 +20,8 @@ from src.automl import (
     detect_problem_type,
     train_models,
     tune_best_model,
-    detect_class_imbalance
+    detect_class_imbalance,
+    detect_training_mode  
 )
 from src.data_quality import calculate_data_quality
 from src.model_registry import register_model, get_all_models
