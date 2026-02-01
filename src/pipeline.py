@@ -23,7 +23,7 @@ def prepare_features(
     df = df_raw.copy()
 
     # ======================================================
-    # 2️⃣ DROP ID / LEAKAGE COLUMNS
+    # 2️⃣ DROP ID / LEAKAGE COLUMNS (TRAINING ONLY)
     # ======================================================
     id_keywords = ["id", "uuid", "index", "code", "number"]
     drop_cols = []
@@ -36,9 +36,10 @@ def prepare_features(
             drop_cols.append(col)
             continue
 
-        # High-cardinality leakage
-        if df[col].nunique(dropna=False) / len(df) > 0.98:
-            drop_cols.append(col)
+        # High-cardinality leakage — ONLY during training
+        if training and len(df) > 1:
+            if df[col].nunique(dropna=False) / len(df) > 0.98:
+                drop_cols.append(col)
 
     df.drop(columns=list(set(drop_cols)), errors="ignore", inplace=True)
 
@@ -58,12 +59,9 @@ def prepare_features(
         df[f"{col}_week"] = df[col].dt.isocalendar().week.astype("Int64")
         df[f"{col}_day"] = df[col].dt.day.astype("Int64")
         df[f"{col}_dayofweek"] = df[col].dt.dayofweek.astype("Int64")
+        df[f"{col}_is_weekend"] = df[col].dt.dayofweek.isin([5, 6]).astype(int)
 
-        df[f"{col}_is_weekend"] = (
-            df[col].dt.dayofweek.isin([5, 6]).astype(int)
-        )
-
-    # Drop raw datetime columns (VERY IMPORTANT)
+    # Drop raw datetime columns
     df.drop(columns=datetime_cols, errors="ignore", inplace=True)
 
     # ======================================================
@@ -91,13 +89,11 @@ def prepare_features(
         df[col] = df[col].fillna("Unknown")
 
     # ======================================================
-    # 6️⃣ REMOVE HIGH CORRELATED NUMERIC FEATURES (TRAIN ONLY)
+    # 6️⃣ REMOVE HIGHLY CORRELATED FEATURES (TRAIN ONLY)
     # ======================================================
     if training and len(numeric_cols) > 1:
         corr = df[numeric_cols].corr().abs()
-        upper = corr.where(
-            np.triu(np.ones(corr.shape), k=1).astype(bool)
-        )
+        upper = corr.where(np.triu(np.ones(corr.shape), k=1).astype(bool))
 
         drop_corr = [
             col for col in upper.columns
@@ -108,21 +104,26 @@ def prepare_features(
         numeric_cols = [c for c in numeric_cols if c not in drop_corr]
 
     # ======================================================
+    # 7️⃣ BASE FEATURE FRAME
+    # ======================================================
+    feature_cols = numeric_cols + categorical_cols
+    X = df[feature_cols].copy()
 
-# ======================================================
-# 7️⃣ BASE FEATURE FRAME
-        # ======================================================
-    X = df[numeric_cols + categorical_cols].copy()
-        
-        # ======================================================
-        # 8️⃣ ONE-HOT ENCODE CATEGORICALS (SAFE)
-        # ======================================================
+    # 🚨 SAFETY: Empty frame protection
+    if X.shape[1] == 0:
+        if not training and feature_schema is not None:
+            return pd.DataFrame(0, index=[0], columns=feature_schema)
+        return pd.DataFrame(index=df.index)
+
+    # ======================================================
+    # 8️⃣ ONE-HOT ENCODING (SAFE)
+    # ======================================================
     if categorical_cols:
         X = pd.get_dummies(X, drop_first=True)
-        
-        # ======================================================
-        # 9️⃣ NUMERIC SAFETY
-        # ======================================================
+
+    # ======================================================
+    # 9️⃣ NUMERIC SAFETY
+    # ======================================================
     X = X.apply(pd.to_numeric, errors="coerce").fillna(0)
 
     # ======================================================
