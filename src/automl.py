@@ -329,6 +329,36 @@ def detect_data_leakage(X, y, threshold=0.98):
 
     return False, []
 
+def generate_business_impact(shap_values, X, problem_type, target_col):
+    """
+    Returns human-readable business insights
+    """
+
+    mean_abs_shap = np.abs(shap_values).mean(axis=0)
+    feature_importance = pd.Series(
+        mean_abs_shap, index=X.columns
+    ).sort_values(ascending=False)
+
+    insights = []
+
+    for feat in feature_importance.head(3).index:
+        corr = np.corrcoef(X[feat], X.mean(axis=1))[0, 1]
+
+        direction = "increase" if corr > 0 else "decrease"
+
+        if problem_type == "regression":
+            insights.append(
+                f"📈 Changes in **{feat}** are strongly associated with "
+                f"an **{direction} in {target_col}**, suggesting this feature "
+                f"has high business impact."
+            )
+        else:
+            insights.append(
+                f"⚠️ **{feat}** significantly influences classification outcomes "
+                f"and should be monitored for risk reduction."
+            )
+
+    return insights
 
 
 
