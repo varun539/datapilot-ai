@@ -208,6 +208,35 @@ elif page == "🧠 Explainability":
     shap.summary_plot(shap_vals, X_sample, show=False)
     st.pyplot(fig)
 
+
+
+
+
+
+st.subheader("💼 Business Impact Insights")
+
+from src.impact import generate_business_impact
+
+explainer = shap.TreeExplainer(model)
+shap_vals = explainer.shap_values(X)
+
+if isinstance(shap_vals, list):
+    shap_vals = shap_vals[1]
+
+insights = generate_business_impact(
+    shap_vals,
+    X,
+    problem_type,
+    target_col
+)
+
+for i in insights:
+    st.info(i)
+
+
+
+
+
 # ======================================================
 # PREDICTION
 # ======================================================
@@ -259,3 +288,19 @@ elif page == "⬇️ Downloads":
     if os.path.exists("models/best_model.pkl"):
         with open("models/best_model.pkl", "rb") as f:
             st.download_button("Download Model", f, "best_model.pkl")
+
+
+st.subheader("📄 Export Model Report")
+
+if st.button("📥 Download PDF Report"):
+    path = generate_pdf_report(
+        st.session_state.model_card,
+        insights
+    )
+
+    with open(path, "rb") as f:
+        st.download_button(
+            "⬇️ Download Report",
+            f,
+            "DataPilot_Model_Report.pdf"
+        )
