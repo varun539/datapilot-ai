@@ -24,6 +24,8 @@ from src.automl import (
 from src.data_quality import calculate_data_quality
 from src.model_registry import register_model, get_all_models
 from src.impact import generate_business_impact
+from src.report import generate_pdf_report
+
 
 # ======================================================
 # PAGE CONFIG
@@ -222,6 +224,25 @@ elif page == "🤖 AutoML":
             st.subheader("💼 Business Impact Insights")
             for i in insights:
                 st.info(i)
+
+
+
+st.subheader("📄 Export Model Report")
+
+if st.button("📥 Generate PDF Report"):
+    pdf_path = generate_pdf_report(
+        st.session_state.model_card,
+        insights  # business insights list
+    )
+
+    with open(pdf_path, "rb") as f:
+        st.download_button(
+            "⬇️ Download PDF Report",
+            f,
+            "DataPilot_Model_Report.pdf",
+            mime="application/pdf"
+        )
+
 
 # ======================================================
 # 🧠 EXPLAINABILITY
