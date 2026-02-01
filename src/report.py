@@ -3,17 +3,33 @@
 from reportlab.platypus import (
     SimpleDocTemplate,
     Paragraph,
-    Spacer
+    Spacer,
+    ListFlowable,
+    ListItem
 )
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import inch
 import datetime
+import re
 
 
-def generate_pdf_report(model_card, business_insights, output_path="DataPilot_Report.pdf"):
+def _clean_text(text: str) -> str:
     """
-    Generates a professional ML PDF report
+    Remove emojis and markdown for PDF safety
+    """
+    text = re.sub(r"\*\*(.*?)\*\*", r"\1", text)  # remove **
+    text = re.sub(r"[^\x00-\x7F]+", "", text)     # remove emojis
+    return text
+
+
+def generate_pdf_report(
+    model_card,
+    business_insights,
+    output_path="DataPilot_Report.pdf"
+):
+    """
+    Generates a professional, business-safe ML PDF report
     """
 
     styles = getSampleStyleSheet()
@@ -23,90 +39,129 @@ def generate_pdf_report(model_card, business_insights, output_path="DataPilot_Re
     # TITLE
     # ==========================
     story.append(Paragraph(
-        "<b>DataPilot AI — Model Report</b>",
+        "DataPilot AI — Model Report",
         styles["Title"]
     ))
-    story.append(Spacer(1, 0.3 * inch))
+    story.append(Spacer(1, 0.25 * inch))
 
     story.append(Paragraph(
         f"Generated on: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}",
         styles["Normal"]
     ))
-    story.append(Spacer(1, 0.3 * inch))
+    story.append(Spacer(1, 0.25 * inch))
 
     # ==========================
     # MODEL OVERVIEW
     # ==========================
-    story.append(Paragraph("<b>Model Overview</b>", styles["Heading2"]))
+    story.append(Paragraph("Model Overview", styles["Heading2"]))
     story.append(Spacer(1, 0.1 * inch))
 
-    story.append(Paragraph(
-        f"""
-        <b>Model:</b> {model_card.get('model')}<br/>
-        <b>Problem Type:</b> {model_card.get('problem')}<br/>
-        <b>Training Mode:</b> {model_card.get('mode')}<br/>
-        <b>Target Variable:</b> {model_card.get('target')}
-        """,
-        styles["Normal"]
-    ))
+    overview_text = f"""
+    <b>Model:</b> {model_card.get('model')}<br/>
+    <b>Problem Type:</b> {model_card.get('problem')}<br/>
+    <b>Training Mode:</b> {model_card.get('mode')}<br/>
+    <b>Target Variable:</b> {model_card.get('target')}
+    """
 
-    story.append(Spacer(1, 0.3 * inch))
+    story.append(Paragraph(overview_text, styles["Normal"]))
+    story.append(Spacer(1, 0.25 * inch))
 
     # ==========================
     # DATASET SUMMARY
     # ==========================
-    story.append(Paragraph("<b>Dataset Summary</b>", styles["Heading2"]))
+    story.append(Paragraph("Dataset Summary", styles["Heading2"]))
     story.append(Spacer(1, 0.1 * inch))
 
-    story.append(Paragraph(
-        f"""
-        <b>Total Rows:</b> {model_card.get('rows')}<br/>
-        <b>Features Used:</b> {model_card.get('features')}
-        """,
-        styles["Normal"]
-    ))
+    dataset_text = f"""
+    <b>Total Rows:</b> {model_card.get('rows')}<br/>
+    <b>Features Used:</b> {model_card.get('features')}
+    """
 
-    story.append(Spacer(1, 0.3 * inch))
+    story.append(Paragraph(dataset_text, styles["Normal"]))
+    story.append(Spacer(1, 0.25 * inch))
 
     # ==========================
     # PERFORMANCE
     # ==========================
-    story.append(Paragraph("<b>Model Performance</b>", styles["Heading2"]))
+    story.append(Paragraph("Model Performance", styles["Heading2"]))
     story.append(Spacer(1, 0.1 * inch))
 
     perf = model_card.get("performance", {})
     for k, v in perf.items():
         story.append(Paragraph(f"<b>{k}:</b> {v}", styles["Normal"]))
 
-    story.append(Spacer(1, 0.3 * inch))
+    story.append(Spacer(1, 0.25 * inch))
 
     # ==========================
     # BUSINESS IMPACT
     # ==========================
-    story.append(Paragraph("<b>Business Impact Insights</b>", styles["Heading2"]))
+    story.append(Paragraph("Business Impact Insights", styles["Heading2"]))
     story.append(Spacer(1, 0.1 * inch))
 
     if business_insights:
-        for insight in business_insights:
-            story.append(Paragraph(f"- {insight}", styles["Normal"]))
-            story.append(Spacer(1, 0.1 * inch))
-    else:
-        story.append(Paragraph("No significant business insights detected.", styles["Normal"]))
+        clean_items = [
+            ListItem(
+                Paragraph(_clean_text(insight), styles["Normal"])
+            )
+            for insight in business_insights
+        ]
 
-    story.append(Spacer(1, 0.3 * inch))
+        story.append(ListFlowable(
+            clean_items,
+            bulletType="bullet",
+            start="circle"
+        ))
+    else:
+        story.append(Paragraph(
+            "No significant business insights detected.",
+            styles["Normal"]
+        ))
+
+    story.append(Spacer(1, 0.25 * inch))
+
+    # ==========================
+    # INTERPRETATION NOTICE
+    # ==========================
+    story.append(Paragraph("Interpretation Notice", styles["Heading2"]))
+    story.append(Spacer(1, 0.1 * inch))
+
+    interpretation_points = [
+        "Feature importance reflects statistical association, not causation.",
+        "Observed relationships may be influenced by external economic or behavioral factors.",
+        "Model insights should be combined with domain expertise."
+    ]
+
+    story.append(ListFlowable(
+        [ListItem(Paragraph(p, styles["Normal"])) for p in interpretation_points],
+        bulletType="bullet"
+    ))
+
+    story.append(Spacer(1, 0.25 * inch))
 
     # ==========================
     # LIMITATIONS
     # ==========================
-    story.append(Paragraph("<b>Limitations & Risk Notice</b>", styles["Heading2"]))
+    story.append(Paragraph("Limitations & Risk Notice", styles["Heading2"]))
     story.append(Spacer(1, 0.1 * inch))
 
+    limitation_points = [
+        "Model performance depends on historical data quality.",
+        "Predictions may be unreliable for unseen or extreme values.",
+        "This model is intended for decision support, not autonomous decisions."
+    ]
+
+    story.append(ListFlowable(
+        [ListItem(Paragraph(p, styles["Normal"])) for p in limitation_points],
+        bulletType="bullet"
+    ))
+
+    story.append(Spacer(1, 0.35 * inch))
+
+    # ==========================
+    # FOOTER
+    # ==========================
     story.append(Paragraph(
-        """
-        • Model performance depends on historical data quality.<br/>
-        • Predictions may be unreliable for unseen or extreme values.<br/>
-        • This model should support decisions, not replace human judgment.
-        """,
+        "Generated by DataPilot AI<br/>Built by Varun B",
         styles["Normal"]
     ))
 
