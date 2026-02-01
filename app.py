@@ -238,6 +238,40 @@ elif page == "🧠 Explainability":
 # ======================================================
 # 🔮 PREDICTION
 # ======================================================
+# elif page == "🔮 Prediction":
+#     if st.session_state.model is None:
+#         st.warning("Train a model first")
+#         st.stop()
+
+#     model = st.session_state.model
+#     schema = st.session_state.feature_schema
+
+#     date = st.date_input("📅 Select Date")
+#     inputs = {c: st.number_input(c, 0.0) for c in schema if not c.startswith("Date_")}
+#     inputs.update({
+#         "Date_year": date.year,
+#         "Date_month": date.month,
+#         "Date_day": date.day,
+#         "Date_dayofweek": date.weekday(),
+#         "Date_is_weekend": int(date.weekday() >= 5)
+#     })
+
+#     if st.button("Predict"):
+#         Xp = prepare_features(pd.DataFrame([inputs]), profile, training=False, feature_schema=schema)
+#         pred = model.predict(Xp)[0]
+
+#         if st.session_state.problem_type == "regression":
+#             std = st.session_state.residual_std or 0
+#             st.success(f"Prediction: {pred:.2f}")
+#             st.info(f"Confidence Range: {pred-1.5*std:.2f} – {pred+1.5*std:.2f}")
+#         else:
+#             prob = model.predict_proba(Xp)[0]
+#             st.success(f"Class: {np.argmax(prob)}")
+#             st.info(f"Confidence: {np.max(prob)*100:.1f}%")
+
+
+
+
 elif page == "🔮 Prediction":
     if st.session_state.model is None:
         st.warning("Train a model first")
@@ -245,29 +279,104 @@ elif page == "🔮 Prediction":
 
     model = st.session_state.model
     schema = st.session_state.feature_schema
+    problem_type = st.session_state.problem_type
 
-    date = st.date_input("📅 Select Date")
-    inputs = {c: st.number_input(c, 0.0) for c in schema if not c.startswith("Date_")}
-    inputs.update({
-        "Date_year": date.year,
-        "Date_month": date.month,
-        "Date_day": date.day,
-        "Date_dayofweek": date.weekday(),
-        "Date_is_weekend": int(date.weekday() >= 5)
-    })
+    mode = st.radio(
+        "Prediction Mode",
+        ["Single Prediction", "Batch CSV Prediction"]
+    )
 
-    if st.button("Predict"):
-        Xp = prepare_features(pd.DataFrame([inputs]), profile, training=False, feature_schema=schema)
-        pred = model.predict(Xp)[0]
+    # ======================================================
+    # 🧍 SINGLE PREDICTION (already good)
+    # ======================================================
+    if mode == "Single Prediction":
 
-        if st.session_state.problem_type == "regression":
-            std = st.session_state.residual_std or 0
-            st.success(f"Prediction: {pred:.2f}")
-            st.info(f"Confidence Range: {pred-1.5*std:.2f} – {pred+1.5*std:.2f}")
-        else:
-            prob = model.predict_proba(Xp)[0]
-            st.success(f"Class: {np.argmax(prob)}")
-            st.info(f"Confidence: {np.max(prob)*100:.1f}%")
+        date = st.date_input("📅 Select Date")
+
+        inputs = {
+            c: st.number_input(c, 0.0)
+            for c in schema
+            if not c.startswith("Date_")
+        }
+
+        inputs.update({
+            "Date_year": date.year,
+            "Date_month": date.month,
+            "Date_day": date.day,
+            "Date_dayofweek": date.weekday(),
+            "Date_is_weekend": int(date.weekday() >= 5)
+        })
+
+        if st.button("🎯 Predict"):
+            Xp = prepare_features(
+                pd.DataFrame([inputs]),
+                profile,
+                training=False,
+                feature_schema=schema
+            )
+
+            pred = model.predict(Xp)[0]
+
+            if problem_type == "regression":
+                std = st.session_state.residual_std or 0
+                st.success(f"Prediction: {pred:.2f}")
+                st.info(f"Confidence Range: {pred-1.5*std:.2f} – {pred+1.5*std:.2f}")
+            else:
+                prob = model.predict_proba(Xp)[0]
+                st.success(f"Class: {np.argmax(prob)}")
+                st.info(f"Confidence: {np.max(prob)*100:.1f}%")
+
+    # ======================================================
+    # 📦 BATCH CSV PREDICTION (NEW 🔥)
+    # ======================================================
+    else:
+        st.subheader("📦 Batch CSV Prediction")
+
+        batch_file = st.file_uploader(
+            "Upload CSV for Batch Prediction",
+            type=["csv"],
+            key="batch_upload"
+        )
+
+        if batch_file:
+            batch_df = load_cached_csv(batch_file)
+
+            st.info(f"Rows uploaded: {batch_df.shape[0]}")
+
+            # 🔧 Run same feature pipeline
+            X_batch = prepare_features(
+                batch_df,
+                profile,
+                training=False,
+                feature_schema=schema
+            )
+
+            preds = model.predict(X_batch)
+            result_df = batch_df.copy()
+            result_df["prediction"] = preds
+
+            # =============================
+            # Confidence (optional but 🔥)
+            # =============================
+            if problem_type == "regression":
+                std = st.session_state.residual_std or 0
+                result_df["lower_bound"] = preds - 1.5 * std
+                result_df["upper_bound"] = preds + 1.5 * std
+
+            elif problem_type == "classification":
+                probs = model.predict_proba(X_batch)
+                result_df["confidence"] = probs.max(axis=1)
+
+            st.success("✅ Batch prediction completed")
+            st.dataframe(result_df.head(20), use_container_width=True)
+
+            csv = result_df.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                "⬇️ Download Predictions CSV",
+                csv,
+                "batch_predictions.csv",
+                mime="text/csv"
+            )
 
 # ======================================================
 # 🧪 EXPERIMENT HISTORY
