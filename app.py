@@ -10,7 +10,11 @@ from sklearn.model_selection import cross_val_score, KFold, StratifiedKFold
 
 from src.pipeline import prepare_features
 from src.data_loader import load_csv
-from src.eda import basic_profile, plot_numeric_distributions, plot_correlation_heatmap
+from src.eda import (
+    basic_profile,
+    plot_numeric_distributions,
+    plot_correlation_heatmap
+)
 from src.automl import (
     detect_problem_type,
     train_models,
@@ -23,12 +27,14 @@ from src.impact import generate_business_impact
 from src.report import generate_pdf_report
 from src.experiments import log_experiment, load_experiments
 
-
 # ======================================================
 # PAGE CONFIG
 # ======================================================
 st.set_page_config(page_title="Varun's DataPilot AI", layout="wide")
 
+# ======================================================
+# CACHE
+# ======================================================
 @st.cache_data
 def load_cached_csv(file):
     return load_csv(file)
@@ -36,12 +42,12 @@ def load_cached_csv(file):
 # ======================================================
 # SESSION STATE
 # ======================================================
-for k in [
+STATE_KEYS = [
     "X", "y", "model", "problem_type", "target_col",
     "training_mode", "feature_schema",
-    "model_card", "business_insights",
-    "residual_std"
-]:
+    "model_card", "business_insights", "residual_std"
+]
+for k in STATE_KEYS:
     st.session_state.setdefault(k, None)
 
 st.session_state.setdefault("handle_imbalance", True)
@@ -50,6 +56,8 @@ st.session_state.setdefault("handle_imbalance", True)
 # SIDEBAR
 # ======================================================
 st.sidebar.title("🚀 Varun's DataPilot AI")
+st.sidebar.caption("Production AutoML Platform")
+
 page = st.sidebar.radio(
     "Navigate",
     [
@@ -68,35 +76,56 @@ page = st.sidebar.radio(
 # HEADER
 # ======================================================
 st.title("🚀 Varun's DataPilot AI")
-uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
+st.caption("End-to-End AutoML Platform")
 
+uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
 if not uploaded_file:
+    st.info("Upload a CSV to begin")
     st.stop()
 
 df = load_cached_csv(uploaded_file)
 profile = basic_profile(df)
 
+st.sidebar.success("Dataset Loaded")
+st.sidebar.metric("Rows", df.shape[0])
+st.sidebar.metric("Columns", df.shape[1])
+
 # ======================================================
-# DATA OVERVIEW
+# 📊 DATA OVERVIEW
 # ======================================================
 if page == "📊 Data Overview":
-    score, level, msgs = calculate_data_quality(profile)
-    st.metric("Quality Score", score)
-    for m in msgs:
+    score, level, messages = calculate_data_quality(profile)
+    st.metric("Quality Score", f"{score}/100")
+    st.markdown(f"### {level}")
+    for m in messages:
         st.warning(m)
-    st.dataframe(df.head())
+    st.dataframe(df.head(), use_container_width=True)
 
 # ======================================================
-# VISUALS
+# 📈 VISUAL ANALYTICS
 # ======================================================
 elif page == "📈 Visual Analytics":
+    st.header("📈 Visual Analytics")
+
     for fig in plot_numeric_distributions(df, profile["numeric_cols"]):
-        st.pyplot(fig)
+        st.pyplot(fig, use_container_width=True)
+
+    numeric_for_corr = [
+        c for c in profile["numeric_cols"]
+        if c in df.columns and df[c].nunique() > 1
+    ]
+
+    if len(numeric_for_corr) >= 2:
+        fig = plot_correlation_heatmap(df, numeric_for_corr)
+        st.pyplot(fig, use_container_width=True)
+    else:
+        st.info("Not enough numeric features for correlation heatmap.")
 
 # ======================================================
-# AUTOML
+# 🤖 AUTOML
 # ======================================================
 elif page == "🤖 AutoML":
+    st.header("🤖 Automated Machine Learning")
 
     numeric_targets = []
     for c in df.columns:
@@ -107,60 +136,59 @@ elif page == "🤖 AutoML":
             pass
 
     target_col = st.selectbox("🎯 Select Target Column", numeric_targets)
+    st.session_state.target_col = target_col
 
     if st.button("🚀 Train Models"):
-        with st.spinner("Training..."):
+        with st.spinner("Training models..."):
 
             X = prepare_features(df, profile, target_col, training=True)
             y = pd.to_numeric(df[target_col], errors="coerce").fillna(df[target_col].median())
 
-            leak, feats = detect_data_leakage(X, y)
+            leak, leaked = detect_data_leakage(X, y)
             if leak:
-                st.error("Data leakage detected")
+                st.error("⚠️ Data leakage detected. Training stopped.")
+                for f, c in leaked:
+                    st.write(f"{f} → corr={c}")
                 st.stop()
 
             problem_type = detect_problem_type(y)
             training_mode = detect_training_mode(df, target_col, profile)
 
-            results, best_model_name = train_models(
-                X, y, problem_type, st.session_state.handle_imbalance
-            )
-
+            results, best_model_name = train_models(X, y, problem_type)
             model = joblib.load("models/best_model.pkl")
 
-            # ===============================
-            # CROSS-VALIDATION (🔥 CORRECT)
-            # ===============================
-            if problem_type == "regression":
-                cv = KFold(5, shuffle=True, random_state=42)
-                scores = cross_val_score(model, X, y, cv=cv, scoring="r2")
-                cv_name = "R2 (CV)"
-            else:
-                cv = StratifiedKFold(5, shuffle=True, random_state=42)
-                scores = cross_val_score(model, X, y, cv=cv, scoring="accuracy")
-                cv_name = "Accuracy (CV)"
-
-            cv_mean = scores.mean()
-            cv_std = scores.std()
-
-            # ===============================
-            # SAVE STATE
-            # ===============================
             st.session_state.update({
                 "X": X,
                 "y": y,
                 "model": model,
                 "problem_type": problem_type,
                 "training_mode": training_mode,
-                "feature_schema": X.columns.tolist(),
+                "feature_schema": X.columns.tolist()
             })
 
+            # ===============================
+            # Cross Validation
+            # ===============================
+            if problem_type == "regression":
+                cv = KFold(n_splits=5, shuffle=True, random_state=42)
+                scores = cross_val_score(model, X, y, cv=cv, scoring="r2")
+                cv_metric = "R2 (CV)"
+            else:
+                cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+                scores = cross_val_score(model, X, y, cv=cv, scoring="accuracy")
+                cv_metric = "Accuracy (CV)"
+
+            cv_mean, cv_std = scores.mean(), scores.std()
+
+            # ===============================
+            # Confidence
+            # ===============================
             if problem_type == "regression":
                 preds = model.predict(X)
                 st.session_state.residual_std = np.std(y - preds)
 
             # ===============================
-            # MODEL CARD (FINAL)
+            # Model Card
             # ===============================
             st.session_state.model_card = {
                 "model": best_model_name,
@@ -170,57 +198,76 @@ elif page == "🤖 AutoML":
                 "features": X.shape[1],
                 "target": target_col,
                 "performance": {
-                    cv_name: round(cv_mean, 4),
+                    cv_metric: round(cv_mean, 4),
                     "CV Std": round(cv_std, 4)
                 }
             }
 
-            register_model(
-                "models/best_model.pkl",
-                best_model_name,
-                round(cv_mean, 4),
-                X.shape[1],
-                {}
-            )
-
-            log_experiment(st.session_state.model_card)
-
             # ===============================
-            # BUSINESS IMPACT
+            # Business Impact (SAFE)
             # ===============================
             explainer = shap.TreeExplainer(model)
             shap_vals = explainer.shap_values(X)
             if isinstance(shap_vals, list):
                 shap_vals = shap_vals[1]
 
-            insights = generate_business_impact(shap_vals, X, problem_type, target_col)
+            insights = generate_business_impact(
+                shap_vals, X, problem_type, target_col
+            )
             st.session_state.business_insights = insights
 
-            # ===============================
-            # UI OUTPUT
-            # ===============================
+            register_model("models/best_model.pkl", best_model_name, cv_mean, X.shape[1], {})
+            log_experiment(st.session_state.model_card)
+
             st.success(f"🏆 Best Model: {best_model_name}")
-            st.metric(cv_name, f"{cv_mean:.4f}", delta=f"±{cv_std:.4f}")
-            st.dataframe(results)
+            st.metric(cv_metric, f"{cv_mean:.4f}", delta=f"±{cv_std:.4f}")
+            st.dataframe(results, use_container_width=True)
 
             st.subheader("💼 Business Impact")
             for i in insights:
                 st.info(i)
 
 # ======================================================
-# PREDICTION (SINGLE + BATCH)
+# 🧠 EXPLAINABILITY (SHAP — FIXED)
+# ======================================================
+elif page == "🧠 Explainability":
+    if st.session_state.model is None:
+        st.warning("Train a model first")
+        st.stop()
+
+    Xs = (
+        st.session_state.X
+        .sample(min(200, len(st.session_state.X)), random_state=42)
+        .apply(pd.to_numeric, errors="coerce")
+        .fillna(0)
+    )
+
+    explainer = shap.TreeExplainer(st.session_state.model)
+    shap_vals = explainer.shap_values(Xs)
+    if isinstance(shap_vals, list):
+        shap_vals = shap_vals[1]
+
+    fig = plt.figure(figsize=(10, 5))
+    shap.summary_plot(shap_vals, Xs, show=False)
+    st.pyplot(fig)
+
+# ======================================================
+# 🔮 PREDICTION (SINGLE + BATCH)
 # ======================================================
 elif page == "🔮 Prediction":
     if st.session_state.model is None:
+        st.warning("Train a model first")
         st.stop()
 
     model = st.session_state.model
     schema = st.session_state.feature_schema
+    problem_type = st.session_state.problem_type
 
-    mode = st.radio("Mode", ["Single", "Batch"])
+    mode = st.radio("Prediction Mode", ["Single", "Batch CSV"])
 
     if mode == "Single":
-        date = st.date_input("Date")
+        date = st.date_input("📅 Select Date")
+
         inputs = {c: st.number_input(c, 0.0) for c in schema if not c.startswith("Date_")}
         inputs.update({
             "Date_year": date.year,
@@ -231,41 +278,68 @@ elif page == "🔮 Prediction":
         })
 
         if st.button("Predict"):
-            Xp = prepare_features(pd.DataFrame([inputs]), profile, False, schema)
+            Xp = prepare_features(
+                pd.DataFrame([inputs]),
+                profile,
+                training=False,
+                feature_schema=schema
+            )
+
             pred = model.predict(Xp)[0]
-            st.success(pred)
+            if problem_type == "regression":
+                std = st.session_state.residual_std or 0
+                st.success(f"Prediction: {pred:.2f}")
+                st.info(f"Range: {pred-1.5*std:.2f} – {pred+1.5*std:.2f}")
+            else:
+                prob = model.predict_proba(Xp)[0]
+                st.success(f"Class: {np.argmax(prob)}")
+                st.info(f"Confidence: {np.max(prob)*100:.1f}%")
 
     else:
-        f = st.file_uploader("Upload CSV")
-        if f:
-            bdf = load_cached_csv(f)
-            Xb = prepare_features(bdf, profile, False, schema)
+        batch = st.file_uploader("Upload CSV", type=["csv"])
+        if batch:
+            batch_df = load_cached_csv(batch)
+            Xb = prepare_features(batch_df, profile, training=False, feature_schema=schema)
             preds = model.predict(Xb)
-            bdf["prediction"] = preds
-            st.dataframe(bdf.head())
-            st.download_button("Download", bdf.to_csv(index=False), "preds.csv")
+
+            out = batch_df.copy()
+            out["prediction"] = preds
+
+            st.dataframe(out.head(20), use_container_width=True)
+            st.download_button(
+                "Download CSV",
+                out.to_csv(index=False).encode(),
+                "batch_predictions.csv"
+            )
 
 # ======================================================
-# EXPERIMENTS
+# 🧪 EXPERIMENT HISTORY
 # ======================================================
 elif page == "🧪 Experiment History":
     exp = load_experiments()
-    st.dataframe(pd.DataFrame(exp))
+    if exp:
+        st.dataframe(pd.DataFrame(exp), use_container_width=True)
+    else:
+        st.info("No experiments yet.")
 
 # ======================================================
-# REGISTRY
+# 📦 MODEL REGISTRY
 # ======================================================
 elif page == "📦 Model Registry":
-    st.dataframe(pd.DataFrame(get_all_models()))
+    st.dataframe(pd.DataFrame(get_all_models()), use_container_width=True)
 
 # ======================================================
-# DOWNLOADS
+# ⬇️ DOWNLOADS
 # ======================================================
 elif page == "⬇️ Downloads":
-    if st.session_state.model_card:
+    if os.path.exists("models/best_model.pkl"):
+        with open("models/best_model.pkl", "rb") as f:
+            st.download_button("Download Model", f, "best_model.pkl")
+
+    if st.session_state.model_card and st.session_state.business_insights:
         path = generate_pdf_report(
             st.session_state.model_card,
             st.session_state.business_insights
         )
         with open(path, "rb") as f:
-            st.download_button("Download Report", f, "report.pdf")
+            st.download_button("Download PDF Report", f, "DataPilot_Report.pdf")
