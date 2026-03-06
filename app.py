@@ -161,19 +161,6 @@ st.session_state.setdefault("chat_history", [])
 st.sidebar.title("🚀 DataPilot AI")
 st.sidebar.caption("Agentic AutoML Platform by Varun B")
 
-# # 🔑 API KEY INPUT
-# with st.sidebar.expander("🔑 OpenAI API Key", expanded=False):
-#     api_key = st.text_input(
-#         "Paste your OpenAI key",
-#         type="password",
-#         placeholder="sk-...",
-#         help="Used for AI narrative, chat, and smart suggestions"
-#     )
-#     if api_key:
-#         st.success("✅ Key loaded")
-#     else:
-#         st.warning("Add key to enable AI features")
-if not uploaded_file:
     st.info("Upload a CSV to begin.")
     st.stop()
 
@@ -183,8 +170,6 @@ profile = basic_profile(df)
 st.sidebar.success("✅ Dataset Loaded")
 st.sidebar.metric("Rows", df.shape[0])
 st.sidebar.metric("Columns", df.shape[1])
-
-
 
 # ======================================================
 # DATA OVERVIEW
@@ -623,15 +608,67 @@ elif page == "🔮 Prediction":
     mode = st.radio("Prediction Mode", ["Single", "Batch CSV"])
 
     if mode == "Single":
-        date = st.date_input("📅 Select Date")
-        inputs = {c: st.number_input(c, 0.0) for c in schema if not c.startswith("Date_")}
-        inputs.update({
-            "Date_year": date.year,
-            "Date_month": date.month,
-            "Date_day": date.day,
-            "Date_dayofweek": date.weekday(),
-            "Date_is_weekend": int(date.weekday() >= 5)
-        })
+
+        # ── FRIENDLY INPUT UI ──────────────────────────────
+        # Instead of showing encoded columns like Ship_Mode_Same_Day,
+        # show clean dropdowns for categorical features
+        # and number inputs only for real numeric features
+
+        inputs = {}
+
+        # Core numeric features — always show these
+        core_numeric = ["Sales", "Quantity", "Discount"]
+        for col in core_numeric:
+            if col in schema:
+                inputs[col] = st.number_input(col, value=0.0)
+
+        # Friendly categorical dropdowns
+        cat_options = {
+            "Ship Mode": ["First Class", "Same Day", "Second Class", "Standard Class"],
+            "Segment":   ["Consumer", "Corporate", "Home Office"],
+            "Region":    ["Central", "East", "South", "West"],
+            "Category":  ["Furniture", "Office Supplies", "Technology"],
+            "Sub-Category": [
+                "Accessories", "Appliances", "Art", "Binders", "Bookcases",
+                "Chairs", "Copiers", "Envelopes", "Fasteners", "Furnishings",
+                "Labels", "Machines", "Paper", "Phones", "Storage",
+                "Supplies", "Tables"
+            ]
+        }
+
+        selected_cats = {}
+        for friendly_name, options in cat_options.items():
+            # Check if any encoded version exists in schema
+            col_prefix = friendly_name.replace(" ", "_").replace("-", "_") + "_"
+            if any(c.startswith(col_prefix) for c in schema):
+                selected_cats[friendly_name] = st.selectbox(friendly_name, options)
+
+        # Date input
+        date = st.date_input("Order Date")
+
+        # Build encoded inputs from friendly selections
+        for friendly_name, selected_val in selected_cats.items():
+            col_prefix = friendly_name.replace(" ", "_").replace("-", "_") + "_"
+            for col in schema:
+                if col.startswith(col_prefix):
+                    suffix = col[len(col_prefix):]
+                    # Match the selected value to encoded column
+                    encoded_val = selected_val.replace(" ", "_").replace("-", "_")
+                    inputs[col] = 1 if suffix == selected_val or suffix == encoded_val else 0
+
+        # Date features
+        for col in schema:
+            if "_year" in col:   inputs[col] = date.year
+            elif "_month" in col: inputs[col] = date.month
+            elif "_day" in col and "_dayofweek" not in col and "_is_weekend" not in col:
+                inputs[col] = date.day
+            elif "_dayofweek" in col: inputs[col] = date.weekday()
+            elif "_is_weekend" in col: inputs[col] = int(date.weekday() >= 5)
+
+        # Fill any remaining schema columns with 0
+        for col in schema:
+            if col not in inputs:
+                inputs[col] = 0
 
         if st.button("Predict"):
             Xp = prepare_features(
