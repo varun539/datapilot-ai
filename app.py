@@ -1,6 +1,3 @@
-
-
-
 # import streamlit as st
 # import pandas as pd
 # import joblib
@@ -421,13 +418,34 @@ elif page == "📈 Visual Analytics":
 elif page == "🤖 AutoML":
     st.header("🤖 Automated Machine Learning")
 
+    # Smart target column filter — removes ID/useless columns
+    useless_keywords = [
+        "id", "uuid", "index", "code", "number", "row",
+        "order", "invoice", "record", "key", "ref", "postal",
+        "zip", "phone", "email"
+    ]
+
     numeric_targets = []
     for c in df.columns:
-        try:
-            pd.to_numeric(df[c])
+        col_lower = c.lower().replace(" ", "_")
+        # Skip if name looks like ID/useless
+        if any(k in col_lower for k in useless_keywords):
+            continue
+        # Skip high cardinality numeric (likely ID numbers)
+        if pd.api.types.is_numeric_dtype(df[c]):
+            if df[c].nunique() / len(df) > 0.8:
+                continue
             numeric_targets.append(c)
-        except:
-            pass
+        else:
+            try:
+                pd.to_numeric(df[c])
+                numeric_targets.append(c)
+            except:
+                pass
+
+    # Fallback — if nothing left show all numeric
+    if not numeric_targets:
+        numeric_targets = df.select_dtypes(include="number").columns.tolist()
 
     target_col = st.selectbox("🎯 Select Target Column", numeric_targets)
     st.session_state.target_col = target_col
