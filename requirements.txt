@@ -10,3 +10,5 @@ lightgbm
 catboost
 shap
 reportlab
+openai
+python-dotenv
