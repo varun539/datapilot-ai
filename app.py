@@ -161,6 +161,19 @@ st.session_state.setdefault("chat_history", [])
 st.sidebar.title("🚀 DataPilot AI")
 st.sidebar.caption("Agentic AutoML Platform by Varun B")
 
+# # 🔑 API KEY INPUT
+# with st.sidebar.expander("🔑 OpenAI API Key", expanded=False):
+#     api_key = st.text_input(
+#         "Paste your OpenAI key",
+#         type="password",
+#         placeholder="sk-...",
+#         help="Used for AI narrative, chat, and smart suggestions"
+#     )
+#     if api_key:
+#         st.success("✅ Key loaded")
+#     else:
+#         st.warning("Add key to enable AI features")
+if not uploaded_file:
     st.info("Upload a CSV to begin.")
     st.stop()
 
