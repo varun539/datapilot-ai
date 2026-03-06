@@ -160,19 +160,6 @@ st.session_state.setdefault("chat_history", [])
 # ======================================================
 st.sidebar.title("🚀 DataPilot AI")
 st.sidebar.caption("Agentic AutoML Platform by Varun B")
-
-# # 🔑 API KEY INPUT
-# with st.sidebar.expander("🔑 OpenAI API Key", expanded=False):
-#     api_key = st.text_input(
-#         "Paste your OpenAI key",
-#         type="password",
-#         placeholder="sk-...",
-#         help="Used for AI narrative, chat, and smart suggestions"
-#     )
-#     if api_key:
-#         st.success("✅ Key loaded")
-#     else:
-#         st.warning("Add key to enable AI features")
 if not uploaded_file:
     st.info("Upload a CSV to begin.")
     st.stop()
@@ -656,8 +643,19 @@ elif page == "🔮 Prediction":
             if any(c.startswith(col_prefix) for c in schema):
                 selected_cats[friendly_name] = st.selectbox(friendly_name, options)
 
-        # Date input
-        date = st.date_input("Order Date")
+        # Smart date input — only show if datetime cols exist in training data
+        date = None
+        has_date_features = any(
+            "_year" in c or "_month" in c or "_dayofweek" in c
+            for c in schema
+        )
+
+        if has_date_features:
+            date = st.date_input("📅 Order Date (used for seasonality features)")
+        else:
+            # Use today as default silently — won't affect prediction
+            from datetime import date as dt
+            date = dt.today()
 
         # Build encoded inputs from friendly selections
         for friendly_name, selected_val in selected_cats.items():
