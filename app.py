@@ -1,42 +1,3 @@
-# import streamlit as st
-# import pandas as pd
-# import joblib
-# import os
-# import numpy as np
-# import matplotlib.pyplot as plt
-# import shap
-
-# from sklearn.model_selection import cross_val_score, KFold, StratifiedKFold
-
-# # 🔑 Load OpenAI key from Streamlit Cloud secrets
-# api_key = st.secrets.get("OPENAI_API_KEY")
-
-# from src.pipeline import prepare_features
-# from src.data_loader import load_csv
-# from src.eda import (
-#     basic_profile,
-#     plot_numeric_distributions,
-#     plot_correlation_heatmap
-# )
-# from src.automl import (
-#     detect_problem_type,
-#     train_models,
-#     detect_training_mode,
-#     detect_data_leakage
-# )
-# from src.data_quality import calculate_data_quality
-# from src.model_registry import register_model, get_all_models
-# from src.impact import generate_business_impact
-# from src.report import generate_pdf_report
-# from src.experiments import log_experiment, load_experiments
-# from src.agent import (
-#     generate_agent_narrative,
-#     chat_with_data,
-#     suggest_target_column,
-#     diagnose_dataset
-# )
-
-
 
 import streamlit as st
 import pandas as pd
@@ -222,52 +183,6 @@ profile = basic_profile(df)
 st.sidebar.success("✅ Dataset Loaded")
 st.sidebar.metric("Rows", df.shape[0])
 st.sidebar.metric("Columns", df.shape[1])
-
-# # ======================================================
-# # 📊 DATA OVERVIEW
-# # ======================================================
-# if page == "📊 Data Overview":
-#     score, level, messages = calculate_data_quality(profile)
-
-#     col1, col2 = st.columns([1, 2])
-#     with col1:
-#         st.metric("Quality Score", f"{score}/100")
-#         st.markdown(f"### {level}")
-#         for m in messages:
-#             st.warning(m)
-
-#     with col2:
-#         # 🤖 AI DATASET DIAGNOSIS
-#         if api_key:
-#             if st.button("🤖 AI Dataset Diagnosis"):
-#                 with st.spinner("Diagnosing your dataset..."):
-#                     diagnosis = diagnose_dataset(api_key, profile, score, messages)
-#                 st.info(diagnosis)
-#         else:
-#             st.info("Add OpenAI key in sidebar to get AI dataset diagnosis")
-
-#     st.dataframe(df.head(), use_container_width=True)
-
-#     # 🤖 SMART TARGET SUGGESTION
-#     if api_key:
-#         st.divider()
-#         st.subheader("🎯 AI Target Column Suggester")
-#         if st.button("Suggest Best Target Column"):
-#             with st.spinner("Analyzing columns..."):
-#                 suggested = suggest_target_column(api_key, df.columns.tolist(), df)
-#             st.success(f"Suggested target: **{suggested}**")
-#             st.caption("Based on column names and data patterns")
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -628,6 +543,10 @@ elif page == "💬 Chat with Data":
     if not api_key:
         st.warning("Add your OpenAI API key in the sidebar to use chat")
         st.stop()
+
+    # Fix: ensure chat_history is always a list
+    if not isinstance(st.session_state.chat_history, list):
+        st.session_state.chat_history = []
 
     # Display chat history
     for msg in st.session_state.chat_history:
