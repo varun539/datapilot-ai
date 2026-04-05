@@ -987,96 +987,108 @@ elif page == "📈 Visual Analytics":
 # ======================================================
 # 🔥 AUTO TARGET SELECTION (REAL AUT0ML STYLE)
 # ======================================================
+# ======================================================
+# 🤖 AUTOML
+# ======================================================
+elif page == "🤖 AutoML":
 
-numeric_targets = []
+    # 🔥 AUTO TARGET SELECTION (CLEAN)
+    numeric_targets = []
 
-for c in df.columns:
-    try:
-        pd.to_numeric(df[c])
-        numeric_targets.append(c)
-    except:
-        continue
-
-# remove obvious useless columns
-filtered_targets = []
-for c in numeric_targets:
-    col_lower = c.lower()
-
-    if any(k in col_lower for k in ["id", "index", "code", "number"]):
-        continue
-
-    filtered_targets.append(c)
-
-# fallback
-if not filtered_targets:
-    filtered_targets = numeric_targets
-
-target = st.selectbox("🎯 Select Target Column", filtered_targets)
-st.session_state.target_col = target
-
-
-
-# elif page == "🤖 AutoML":
-
-#     numeric_targets = [
-#         c for c in df.columns
-#         if pd.api.types.is_numeric_dtype(df[c]) and df[c].nunique() != len(df)
-#     ]
-
-#     if not numeric_targets:
-#         numeric_targets = df.select_dtypes(include="number").columns.tolist()
-
-#     target = st.selectbox("Target", numeric_targets)
-  #  st.session_state.target_col = target
-
-    if st.button("Train"):
-
-        X = prepare_features(df, profile, target, training=True)
-        y = pd.to_numeric(df[target], errors="coerce").fillna(df[target].median())
-
-        leak, _ = detect_data_leakage(X, y)
-        if leak:
-            st.error("Data leakage detected")
-            st.stop()
-
-        problem = detect_problem_type(y)
-        results, best_model_name = train_models(X, y, problem)
-
-        model = joblib.load("models/best_model.pkl")
-
-        st.session_state.update({
-            "X": X,
-            "y": y,
-            "model": model,
-            "problem_type": problem,
-            "feature_schema": X.columns.tolist()
-        })
-
-        cv = KFold(5) if problem == "regression" else StratifiedKFold(5)
-        score = cross_val_score(model, X, y, cv=cv).mean()
-
-        st.success(f"Best Model: {best_model_name}")
-        st.metric("Score", f"{score:.4f}")
-
+    for c in df.columns:
         try:
-            explainer = shap.TreeExplainer(model)
-            shap_vals = explainer.shap_values(X)
-
-            if isinstance(shap_vals, list):
-                shap_vals = shap_vals[1]
-
-            mean_abs = np.abs(shap_vals).mean(axis=0)
-            top_idx = np.argsort(mean_abs)[::-1][:5]
-
-            shap_top = [(X.columns[i], round(float(mean_abs[i]), 4)) for i in top_idx]
-            st.session_state.shap_top_features = shap_top
-
-            insights = generate_business_impact(shap_vals, X, problem, target)
-            for i in insights:
-                st.info(i)
-
+            pd.to_numeric(df[c])
+            numeric_targets.append(c)
         except:
-            st.warning("SHAP not supported")
+            continue
+
+    # remove obvious useless columns
+    filtered_targets = []
+    for c in numeric_targets:
+        col_lower = c.lower()
+
+        if any(k in col_lower for k in ["id", "index", "code", "number"]):
+            continue
+
+        filtered_targets.append(c)
+
+    if not filtered_targets:
+        filtered_targets = numeric_targets
+
+    target = st.selectbox("🎯 Select Target Column", filtered_targets)
+    st.session_state.target_col = target
+
+    # ======================================================
+    # 🚀 TRAIN BUTTON
+    # ======================================================
+    if st.button("🚀 Train Models"):
+
+        with st.spinner("Training models..."):
+
+            # Prepare features
+            X = prepare_features(df, profile, target, training=True)
+            y = pd.to_numeric(df[target], errors="coerce").fillna(df[target].median())
+
+            # Leakage check
+            leak, _ = detect_data_leakage(X, y)
+            if leak:
+                st.error("⚠️ Data leakage detected")
+                st.stop()
+
+            # Detect problem
+            problem = detect_problem_type(y)
+
+            # Train models
+            results, best_model_name = train_models(X, y, problem)
+
+            # Load best model
+            model = joblib.load("models/best_model.pkl")
+
+            st.session_state.update({
+                "X": X,
+                "y": y,
+                "model": model,
+                "problem_type": problem,
+                "feature_schema": X.columns.tolist()
+            })
+
+            # Cross-validation
+            cv = KFold(5) if problem == "regression" else StratifiedKFold(5)
+            score = cross_val_score(model, X, y, cv=cv).mean()
+
+            st.success(f"🏆 Best Model: {best_model_name}")
+            st.metric("Score", f"{score:.4f}")
+
+            # ======================================================
+            # 🔍 SHAP (SAFE)
+            # ======================================================
+            try:
+                explainer = shap.TreeExplainer(model)
+                shap_vals = explainer.shap_values(X)
+
+                if isinstance(shap_vals, list):
+                    shap_vals = shap_vals[1]
+
+                mean_abs = np.abs(shap_vals).mean(axis=0)
+                top_idx = np.argsort(mean_abs)[::-1][:5]
+
+                shap_top = [
+                    (X.columns[i], round(float(mean_abs[i]), 4))
+                    for i in top_idx
+                ]
+                st.session_state.shap_top_features = shap_top
+
+                insights = generate_business_impact(shap_vals, X, problem, target)
+
+                st.subheader("💼 Business Impact")
+                for i in insights:
+                    st.info(i)
+
+            except:
+                st.warning("SHAP not supported for this model")
+
+            # Show results table
+            st.dataframe(results, use_container_width=True)
 
 # ======================================================
 # 🧠 EXPLAINABILITY
