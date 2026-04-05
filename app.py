@@ -888,20 +888,60 @@ if page == "📊 Data Overview":
 
     st.dataframe(df.head())
 
-    # Correlation insight FIXED
-    numeric_cols = df.select_dtypes(include=np.number).columns
+     # ======================================================
+# SAFE CORRELATION INSIGHT (FINAL FIX)
+# ======================================================
 
-    if len(numeric_cols) > 1:
-        corr = df[numeric_cols].corr().abs()
+numeric_cols = df.select_dtypes(include=np.number).columns
 
-        # ✅ FIXED
-        np.fill_diagonal(corr.values, 0)
+if len(numeric_cols) > 1:
 
-        top = corr.unstack().sort_values(ascending=False).drop_duplicates()
+    corr = df[numeric_cols].corr().abs()
 
-        if not top.empty:
+    # 🛡️ Clean invalid values
+    corr = corr.replace([np.inf, -np.inf], np.nan).fillna(0)
+
+    # 🛡️ Ensure valid matrix before diagonal operation
+    if corr.shape[0] > 1 and corr.shape[1] > 1:
+
+        try:
+            np.fill_diagonal(corr.values, 0)
+    except Exception:
+            pass  # extra safety
+
+     top = corr.unstack().sort_values(ascending=False).drop_duplicates()
+
+    if not top.empty:
             f1, f2 = top.index[0]
-            st.info(f"Strongest relation: {f1} ↔ {f2} ({top.iloc[0]:.2f})")
+            value = top.iloc[0]
+
+            st.info(f"Strongest relation: {f1} ↔ {f2} ({value:.2f})")
+
+    else:
+        st.info("Not enough valid numeric features for correlation.")
+
+else:
+    st.info("Not enough numeric columns.")
+    
+    
+    # # Correlation insight FIXED
+    # numeric_cols = df.select_dtypes(include=np.number).columns
+
+    # if len(numeric_cols) > 1:
+    #     corr = df[numeric_cols].corr().abs()
+
+    #     # ✅ FIXED
+    #     np.fill_diagonal(corr.values, 0)
+
+    #     top = corr.unstack().sort_values(ascending=False).drop_duplicates()
+
+    #     if not top.empty:
+    #         f1, f2 = top.index[0]
+    #         st.info(f"Strongest relation: {f1} ↔ {f2} ({top.iloc[0]:.2f})")
+
+
+
+
 
     # Missing values
     missing = df.isnull().sum().sum()
