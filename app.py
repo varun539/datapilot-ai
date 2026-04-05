@@ -139,8 +139,7 @@ st.sidebar.metric("Columns", df.shape[1])
 # ======================================================
 # 📊 DATA OVERVIEW
 # ======================================================
-
-if page == "📊 Data Overview":
+    if page == "📊 Data Overview":
 
     score, level, messages = calculate_data_quality(profile)
 
@@ -152,31 +151,44 @@ if page == "📊 Data Overview":
 
     st.dataframe(df.head())
 
-    # ✅ SIMPLE & SAFE CORRELATION (NO OVERENGINEERING)
+    # =============================
+    # ✅ SAFE CORRELATION
+    # =============================
     numeric_cols = df.select_dtypes(include=np.number).columns
 
-    if len(numeric_cols) > 1:
-        try:
-            corr = df[numeric_cols].corr().abs()
+    if len(numeric_cols) < 2:
+        st.info("Not enough numeric columns for correlation")
 
-            # remove self correlation
-            corr.values[np.diag_indices_from(corr)] = 0
+    else:
+        corr = df[numeric_cols].corr()
 
-            top = corr.unstack().sort_values(ascending=False)
+        # Clean correlation matrix
+        corr = corr.replace([np.inf, -np.inf], np.nan)
+        corr = corr.dropna(how="all", axis=0).dropna(how="all", axis=1)
 
-            # get first valid pair
+        if corr.shape[0] < 2:
+            st.info("Not enough valid numeric features for correlation")
+
+        else:
+            np.fill_diagonal(corr.values, 0)
+
+            # Get strongest pair
+            top = corr.abs().unstack().sort_values(ascending=False)
+
+            found = False
+
             for (f1, f2), val in top.items():
                 if f1 != f2:
                     st.info(f"Strongest relation: {f1} ↔ {f2} ({val:.2f})")
+                    found = True
                     break
 
-        except:
-            st.info("Correlation could not be computed")
+            if not found:
+                st.info("No strong correlations found")
 
-    else:
-        st.info("Not enough numeric columns")
-
-    # ✅ FIXED (NO MORE DELTAGENERATOR BUG)
+    # =============================
+    # ✅ MISSING VALUES
+    # =============================
     missing = df.isnull().sum().sum()
 
     if missing:
@@ -184,13 +196,15 @@ if page == "📊 Data Overview":
     else:
         st.success("No missing values")
 
-    # AI Target suggestion
-    if api_key and st.button("Suggest Target"):
+    # =============================
+    # 🤖 AI TARGET SUGGESTION
+    # =============================
+    if api_key and st.button("Suggest Target", key="suggest_target_btn"):
         target = suggest_target_column(api_key, df.columns.tolist(), df)
         st.success(f"Suggested: {target}")
-
-
-
+    
+    
+    
 
 # ======================================================
 # 📈 VISUALS
