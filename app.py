@@ -155,37 +155,73 @@ if page == "📊 Data Overview":
     # ✅ SAFE CORRELATION
     # =============================
     numeric_cols = df.select_dtypes(include=np.number).columns
-
+    
     if len(numeric_cols) < 2:
         st.info("Not enough numeric columns for correlation")
-
+    
     else:
         corr = df[numeric_cols].corr()
-
+    
         # Clean correlation matrix
         corr = corr.replace([np.inf, -np.inf], np.nan)
         corr = corr.dropna(how="all", axis=0).dropna(how="all", axis=1)
-
+    
         if corr.shape[0] < 2:
             st.info("Not enough valid numeric features for correlation")
-
+    
         else:
-            np.fill_diagonal(corr.values, 0)
-
-            # Get strongest pair
+            # ✅ SAFE diagonal removal
+            for col in corr.columns:
+                if col in corr.index:
+                    corr.loc[col, col] = 0
+    
             top = corr.abs().unstack().sort_values(ascending=False)
-
+    
             found = False
-
+    
             for (f1, f2), val in top.items():
                 if f1 != f2:
                     st.info(f"Strongest relation: {f1} ↔ {f2} ({val:.2f})")
                     found = True
                     break
+    
+            if not found:
+                st.info("No strong correlations found")
 
-                if not found:
-                     st.info("No strong correlations found")
 
+    
+    # numeric_cols = df.select_dtypes(include=np.number).columns
+
+    # if len(numeric_cols) < 2:
+    #     st.info("Not enough numeric columns for correlation")
+
+    # else:
+    #     corr = df[numeric_cols].corr()
+
+    #     # Clean correlation matrix
+    #     corr = corr.replace([np.inf, -np.inf], np.nan)
+    #     corr = corr.dropna(how="all", axis=0).dropna(how="all", axis=1)
+
+    #     if corr.shape[0] < 2:
+    #         st.info("Not enough valid numeric features for correlation")
+
+    #     else:
+    #         np.fill_diagonal(corr.values, 0)
+
+    #         # Get strongest pair
+    #         top = corr.abs().unstack().sort_values(ascending=False)
+
+    #         found = False
+
+    #         for (f1, f2), val in top.items():
+    #             if f1 != f2:
+    #                 st.info(f"Strongest relation: {f1} ↔ {f2} ({val:.2f})")
+    #                 found = True
+    #                 break
+
+    #             if not found:
+    #                  st.info("No strong correlations found")
+    
     # =============================
     # ✅ MISSING VALUES
     # =============================
