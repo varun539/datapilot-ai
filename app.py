@@ -777,6 +777,7 @@
 
 
 
+
 import streamlit as st
 import pandas as pd
 import joblib
@@ -797,20 +798,17 @@ from src.model_registry import register_model, get_all_models
 from src.impact import generate_business_impact
 from src.report import generate_pdf_report
 from src.experiments import log_experiment, load_experiments
-from src.agent import generate_agent_narrative, chat_with_data, suggest_target_column, diagnose_dataset
+from src.agent import generate_agent_narrative, chat_with_data, suggest_target_column
 
 # ======================================================
 # CONFIG
 # ======================================================
-
 st.set_page_config(page_title="DataPilot AI", layout="wide", page_icon="🚀")
-
 api_key = st.secrets.get("OPENAI_API_KEY", None)
 
 # ======================================================
 # CACHE
 # ======================================================
-
 @st.cache_data
 def load_cached_csv(file):
     return load_csv(file)
@@ -818,12 +816,11 @@ def load_cached_csv(file):
 # ======================================================
 # SESSION STATE
 # ======================================================
-
 STATE_KEYS = [
-    "X", "y", "model", "problem_type", "target_col",
-    "training_mode", "feature_schema",
-    "model_card", "business_insights", "residual_std",
-    "agent_narrative", "chat_history", "shap_top_features"
+    "X","y","model","problem_type","target_col",
+    "training_mode","feature_schema",
+    "model_card","business_insights","residual_std",
+    "agent_narrative","chat_history","shap_top_features"
 ]
 
 for k in STATE_KEYS:
@@ -834,7 +831,6 @@ st.session_state.setdefault("chat_history", [])
 # ======================================================
 # SIDEBAR
 # ======================================================
-
 st.sidebar.title("🚀 DataPilot AI")
 st.sidebar.caption("Agentic AutoML Platform")
 
@@ -858,7 +854,6 @@ page = st.sidebar.radio("Navigate", [
 # ======================================================
 # DATA LOAD
 # ======================================================
-
 st.title("🚀 DataPilot AI")
 uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
 
@@ -875,7 +870,6 @@ st.sidebar.metric("Columns", df.shape[1])
 # ======================================================
 # 📊 DATA OVERVIEW
 # ======================================================
-
 if page == "📊 Data Overview":
 
     score, level, messages = calculate_data_quality(profile)
@@ -888,66 +882,34 @@ if page == "📊 Data Overview":
 
     st.dataframe(df.head())
 
-     # ======================================================
-# SAFE CORRELATION INSIGHT (FINAL FIX)
-# ======================================================
+    # ✅ SAFE CORRELATION
+    numeric_cols = df.select_dtypes(include=np.number).columns
 
-numeric_cols = df.select_dtypes(include=np.number).columns
+    if len(numeric_cols) > 1:
+        corr = df[numeric_cols].corr().abs()
+        corr = corr.replace([np.inf, -np.inf], np.nan).fillna(0)
 
-if len(numeric_cols) > 1:
+        if corr.shape[0] > 1:
+            try:
+                np.fill_diagonal(corr.values, 0)
+            except:
+                pass
 
-    corr = df[numeric_cols].corr().abs()
+            top = corr.unstack().sort_values(ascending=False).drop_duplicates()
 
-    # 🛡️ Clean invalid values
-    corr = corr.replace([np.inf, -np.inf], np.nan).fillna(0)
-
-    # 🛡️ Ensure valid matrix before diagonal operation
-    if corr.shape[0] > 1 and corr.shape[1] > 1:
-
-        try:
-            np.fill_diagonal(corr.values, 0)
-    except Exception:
-            pass  # extra safety
-
-     top = corr.unstack().sort_values(ascending=False).drop_duplicates()
-
-    if not top.empty:
-            f1, f2 = top.index[0]
-            value = top.iloc[0]
-
-            st.info(f"Strongest relation: {f1} ↔ {f2} ({value:.2f})")
-
+            if not top.empty:
+                f1, f2 = top.index[0]
+                st.info(f"Strongest relation: {f1} ↔ {f2} ({top.iloc[0]:.2f})")
+        else:
+            st.info("Not enough numeric features for correlation.")
     else:
-        st.info("Not enough valid numeric features for correlation.")
-
-else:
-    st.info("Not enough numeric columns.")
-    
-    
-    # # Correlation insight FIXED
-    # numeric_cols = df.select_dtypes(include=np.number).columns
-
-    # if len(numeric_cols) > 1:
-    #     corr = df[numeric_cols].corr().abs()
-
-    #     # ✅ FIXED
-    #     np.fill_diagonal(corr.values, 0)
-
-    #     top = corr.unstack().sort_values(ascending=False).drop_duplicates()
-
-    #     if not top.empty:
-    #         f1, f2 = top.index[0]
-    #         st.info(f"Strongest relation: {f1} ↔ {f2} ({top.iloc[0]:.2f})")
-
-
-
-
+        st.info("Not enough numeric columns.")
 
     # Missing values
     missing = df.isnull().sum().sum()
     st.warning(f"{missing} missing values") if missing else st.success("No missing values")
 
-    # AI Target suggestion
+    # AI target suggestion
     if api_key and st.button("Suggest Target"):
         target = suggest_target_column(api_key, df.columns.tolist(), df)
         st.success(f"Suggested: {target}")
@@ -955,7 +917,6 @@ else:
 # ======================================================
 # 📈 VISUALS
 # ======================================================
-
 elif page == "📈 Visual Analytics":
 
     for fig in plot_numeric_distributions(df, profile["numeric_cols"]):
@@ -967,18 +928,12 @@ elif page == "📈 Visual Analytics":
 # ======================================================
 # 🤖 AUTOML
 # ======================================================
-
 elif page == "🤖 AutoML":
 
-    # FIXED TARGET FILTER
-    numeric_targets = []
-
-    for c in df.columns:
-        if pd.api.types.is_numeric_dtype(df[c]):
-            # allow continuous targets like Sales
-            if df[c].nunique() == len(df):
-                continue
-            numeric_targets.append(c)
+    numeric_targets = [
+        c for c in df.columns
+        if pd.api.types.is_numeric_dtype(df[c]) and df[c].nunique() != len(df)
+    ]
 
     if not numeric_targets:
         numeric_targets = df.select_dtypes(include="number").columns.tolist()
@@ -1002,19 +957,19 @@ elif page == "🤖 AutoML":
         model = joblib.load("models/best_model.pkl")
 
         st.session_state.update({
-            "X": X, "y": y, "model": model,
+            "X": X,
+            "y": y,
+            "model": model,
             "problem_type": problem,
             "feature_schema": X.columns.tolist()
         })
 
-        # CV
         cv = KFold(5) if problem == "regression" else StratifiedKFold(5)
         score = cross_val_score(model, X, y, cv=cv).mean()
 
         st.success(f"Best Model: {best_model_name}")
         st.metric("Score", f"{score:.4f}")
 
-        # SHAP SAFE
         try:
             explainer = shap.TreeExplainer(model)
             shap_vals = explainer.shap_values(X)
@@ -1028,19 +983,16 @@ elif page == "🤖 AutoML":
             shap_top = [(X.columns[i], round(float(mean_abs[i]), 4)) for i in top_idx]
             st.session_state.shap_top_features = shap_top
 
+            insights = generate_business_impact(shap_vals, X, problem, target)
+            for i in insights:
+                st.info(i)
+
         except:
             st.warning("SHAP not supported")
-
-        insights = generate_business_impact(shap_vals, X, problem, target)
-        st.session_state.business_insights = insights
-
-        for i in insights:
-            st.info(i)
 
 # ======================================================
 # 🧠 EXPLAINABILITY
 # ======================================================
-
 elif page == "🧠 Explainability":
 
     if st.session_state.model is None:
@@ -1065,7 +1017,6 @@ elif page == "🧠 Explainability":
 # ======================================================
 # 💬 CHAT
 # ======================================================
-
 elif page == "💬 Chat":
 
     if not api_key:
@@ -1076,21 +1027,21 @@ elif page == "💬 Chat":
 
     if user_input:
         response = chat_with_data(
-            api_key, user_input,
+            api_key,
+            user_input,
             st.session_state.chat_history,
-            st.session_state.model_card,
-            profile, df,
+            None,
+            profile,
+            df,
             st.session_state.problem_type,
             st.session_state.target_col,
-            st.session_state.business_insights or []
+            []
         )
-
         st.write(response)
 
 # ======================================================
 # 🔮 PREDICTION
 # ======================================================
-
 elif page == "🔮 Prediction":
 
     if st.session_state.model is None:
@@ -1108,7 +1059,6 @@ elif page == "🔮 Prediction":
 # ======================================================
 # 🧪 EXPERIMENTS
 # ======================================================
-
 elif page == "🧪 Experiments":
     exp = load_experiments()
     st.dataframe(pd.DataFrame(exp)) if exp else st.info("No experiments")
@@ -1116,14 +1066,12 @@ elif page == "🧪 Experiments":
 # ======================================================
 # 📦 MODELS
 # ======================================================
-
 elif page == "📦 Models":
     st.dataframe(pd.DataFrame(get_all_models()))
 
 # ======================================================
 # ⬇️ DOWNLOADS
 # ======================================================
-
 elif page == "⬇️ Downloads":
 
     if os.path.exists("models/best_model.pkl"):
