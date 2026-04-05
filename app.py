@@ -869,7 +869,55 @@ st.sidebar.metric("Columns", df.shape[1])
 
 # ======================================================
 # 📊 DATA OVERVIEW
+# # ======================================================
+# if page == "📊 Data Overview":
+
+#     score, level, messages = calculate_data_quality(profile)
+
+#     st.metric("Quality Score", f"{score}/100")
+#     st.write(level)
+
+#     for m in messages:
+#         st.warning(m)
+
+#     st.dataframe(df.head())
+
+#     # ✅ SAFE CORRELATION
+#     numeric_cols = df.select_dtypes(include=np.number).columns
+
+#     if len(numeric_cols) > 1:
+#         corr = df[numeric_cols].corr().abs()
+#         corr = corr.replace([np.inf, -np.inf], np.nan).fillna(0)
+
+#         if corr.shape[0] > 1:
+#             try:
+#                 np.fill_diagonal(corr.values, 0)
+#             except:
+#                 pass
+
+#             top = corr.unstack().sort_values(ascending=False).drop_duplicates()
+
+#             if not top.empty:
+#                 f1, f2 = top.index[0]
+#                 st.info(f"Strongest relation: {f1} ↔ {f2} ({top.iloc[0]:.2f})")
+#         else:
+#             st.info("Not enough numeric features for correlation.")
+#     else:
+#         st.info("Not enough numeric columns.")
+
+#     # Missing values
+#     missing = df.isnull().sum().sum()
+#     st.warning(f"{missing} missing values") if missing else st.success("No missing values")
+
+#     # AI target suggestion
+#     if api_key and st.button("Suggest Target"):
+#         target = suggest_target_column(api_key, df.columns.tolist(), df)
+#         st.success(f"Suggested: {target}")
+
 # ======================================================
+# 📊 DATA OVERVIEW
+# ======================================================
+
 if page == "📊 Data Overview":
 
     score, level, messages = calculate_data_quality(profile)
@@ -882,37 +930,45 @@ if page == "📊 Data Overview":
 
     st.dataframe(df.head())
 
-    # ✅ SAFE CORRELATION
+    # ✅ SIMPLE & SAFE CORRELATION (NO OVERENGINEERING)
     numeric_cols = df.select_dtypes(include=np.number).columns
 
     if len(numeric_cols) > 1:
-        corr = df[numeric_cols].corr().abs()
-        corr = corr.replace([np.inf, -np.inf], np.nan).fillna(0)
+        try:
+            corr = df[numeric_cols].corr().abs()
 
-        if corr.shape[0] > 1:
-            try:
-                np.fill_diagonal(corr.values, 0)
-            except:
-                pass
+            # remove self correlation
+            corr.values[np.diag_indices_from(corr)] = 0
 
-            top = corr.unstack().sort_values(ascending=False).drop_duplicates()
+            top = corr.unstack().sort_values(ascending=False)
 
-            if not top.empty:
-                f1, f2 = top.index[0]
-                st.info(f"Strongest relation: {f1} ↔ {f2} ({top.iloc[0]:.2f})")
-        else:
-            st.info("Not enough numeric features for correlation.")
+            # get first valid pair
+            for (f1, f2), val in top.items():
+                if f1 != f2:
+                    st.info(f"Strongest relation: {f1} ↔ {f2} ({val:.2f})")
+                    break
+
+        except:
+            st.info("Correlation could not be computed")
+
     else:
-        st.info("Not enough numeric columns.")
+        st.info("Not enough numeric columns")
 
-    # Missing values
+    # ✅ FIXED (NO MORE DELTAGENERATOR BUG)
     missing = df.isnull().sum().sum()
-    st.warning(f"{missing} missing values") if missing else st.success("No missing values")
 
-    # AI target suggestion
+    if missing:
+        st.warning(f"{missing} missing values")
+    else:
+        st.success("No missing values")
+
+    # AI Target suggestion
     if api_key and st.button("Suggest Target"):
         target = suggest_target_column(api_key, df.columns.tolist(), df)
         st.success(f"Suggested: {target}")
+
+
+
 
 # ======================================================
 # 📈 VISUALS
