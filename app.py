@@ -326,191 +326,44 @@ elif page == "🤖 AutoML":
 # #     target = st.selectbox("🎯 Select Target Column", filtered_targets)
 # #     st.session_state.target_col = target
 
-# elif page == "🤖 AutoML":
+##1111111111111111111111111111111111111111111111111
+# ======================================================
+# 🤖 AUTOML
+# ======================================================
+elif page == "🤖 AutoML":
 
-#     st.header("🤖 Automated Machine Learning")
+    st.header("🤖 Automated Machine Learning")
 
-#     # ✅ SIMPLE TARGET SELECTION (STABLE)
-#     numeric_targets = df.select_dtypes(include="number").columns.tolist()
-#     target = st.selectbox("🎯 Select Target Column", numeric_targets)
-#     st.session_state.target_col = target
+    # ✅ SIMPLE TARGET SELECTION
+    numeric_targets = df.select_dtypes(include="number").columns.tolist()
+    target = st.selectbox("🎯 Select Target Column", numeric_targets)
+    st.session_state.target_col = target
 
-#     if st.button("🚀 Train Models"):
-
-#         with st.spinner("Training models..."):
-
-#             X = prepare_features(df, profile, target, training=True)
-#             y = pd.to_numeric(df[target], errors="coerce").fillna(df[target].median())
-
-#             # Leakage check
-#             leak, _ = detect_data_leakage(X, y)
-#             if leak:
-#                 st.error("⚠️ Data leakage detected")
-#                 st.stop()
-
-#             problem = detect_problem_type(y)
-
-#             results, best_model_name = train_models(X, y, problem)
-#             model = joblib.load("models/best_model.pkl")
-
-#             st.session_state.update({
-#                 "X": X,
-#                 "y": y,
-#                 "model": model,
-#                 "problem_type": problem,
-#                 "feature_schema": X.columns.tolist()
-#             })
-
-#             # ✅ SIMPLE CV (DON'T OVERCOMPLICATE)
-#             from sklearn.model_selection import KFold, StratifiedKFold
-
-#             if problem == "regression":
-#                 cv = KFold(n_splits=5, shuffle=True, random_state=42)
-#                 score = cross_val_score(model, X, y, cv=cv, scoring="r2").mean()
-#             else:
-#                 cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-#                 score = cross_val_score(model, X, y, cv=cv, scoring="accuracy").mean()
-
-#             st.success(f"🏆 Best Model: {best_model_name}")
-#             st.metric("CV Score", f"{score:.4f}")
-
-#             # ✅ SHAP + BUSINESS IMPACT
-#             try:
-#                 explainer = shap.TreeExplainer(model)
-#                 shap_vals = explainer.shap_values(X)
-
-#                 if isinstance(shap_vals, list):
-#                     shap_vals = shap_vals[1]
-
-#                 insights = generate_business_impact(
-#                     shap_vals, X, y, problem, target
-#                 )
-
-#                 st.subheader("💼 Business Impact")
-#                 for i in insights:
-#                     st.info(i)
-
-#             except:
-#                 st.warning("SHAP not supported")
-
-#             st.dataframe(results, use_container_width=True)
-
-#             # ✅ FIXED MODEL CARD (CRITICAL)
-#             st.session_state.model_card = {
-#                 "model": best_model_name,
-#                 "problem": problem,
-#                 "rows": df.shape[0],
-#                 "features": X.shape[1],
-#                 "target": target,
-#                 "performance": {"CV Score": round(score, 4)}
-#             }
-
-
-# elif page == "🤖 AutoML":
-
-#  st.header("🤖 Automated Machine Learning")
-
-#     numeric_targets = df.select_dtypes(include="number").columns.tolist()
-#     target = st.selectbox("🎯 Select Target Column", numeric_targets)
-#     st.session_state.target_col = target
-
-#     # ✅ SINGLE BUTTON (FIXED)
-#  if st.button("🚀 Train Models", key="train_btn"):
-
-#     with st.spinner("Training models..."):
-
-#     X = prepare_features(df, profile, target, training=True)
-#     y = pd.to_numeric(df[target], errors="coerce").fillna(df[target].median())
-
-#      leak, _ = detect_data_leakage(X, y)
-#      if leak:
-#         st.error("⚠️ Data leakage detected")
-#          st.stop()
-
-#      problem = detect_problem_type(y)
-
-#      results, best_model_name = train_models(X, y, problem)
-#      model = joblib.load("models/best_model.pkl")
-
-#             st.session_state.update({
-#                 "X": X,
-#                 "y": y,
-#                 "model": model,
-#                 "problem_type": problem,
-#                 "feature_schema": X.columns.tolist()
-#             })
-
-#             # ✅ CLEAN CV (NO CONFUSION)
-#             if problem == "regression":
-#                 cv = KFold(n_splits=5, shuffle=True, random_state=42)
-#                 score = cross_val_score(model, X, y, cv=cv, scoring="r2").mean()
-#             else:
-#                 cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-#                 score = cross_val_score(model, X, y, cv=cv, scoring="accuracy").mean()
-
-#             st.success(f"🏆 Best Model: {best_model_name}")
-#             st.metric("CV Score", f"{score:.4f}")
-
-#             # ✅ SHAP FIXED
-#             try:
-#                 explainer = shap.TreeExplainer(model)
-#                 shap_vals = explainer.shap_values(X)
-
-#                 if isinstance(shap_vals, list):
-#                     shap_vals = shap_vals[1]
-
-#                 insights = generate_business_impact(
-#                     shap_vals, X, y, problem, target   # ✅ FIXED
-#                 )
-
-#                 st.session_state.business_insights = insights
-
-#                 st.subheader("💼 Business Impact")
-#                 for i in insights:
-#                     st.info(i)
-
-#             except:
-#                 st.warning("SHAP not supported")
-
-#             st.dataframe(results, use_container_width=True)
-
-#             # ✅ MODEL CARD FIX (FOR CHAT)
-#             st.session_state.model_card = {
-#                 "model": best_model_name,
-#                 "problem": problem,
-#                 "rows": df.shape[0],
-#                 "features": X.shape[1],
-#                 "target": target,
-#                 "performance": {"CV Score": round(score, 4)}
-#             }
-
-    
-
-
-    # ======================================================
-    # 🚀 TRAIN BUTTON
-    # ======================================================
-    if st.button("🚀 Train Models"):
+    # ✅ SINGLE BUTTON (NO DUPLICATE ERROR)
+    if st.button("🚀 Train Models", key="train_btn"):
 
         with st.spinner("Training models..."):
 
-            # Prepare features
+            # =============================
+            # DATA PREP
+            # =============================
             X = prepare_features(df, profile, target, training=True)
             y = pd.to_numeric(df[target], errors="coerce").fillna(df[target].median())
 
-            # Leakage check
+            # =============================
+            # LEAKAGE CHECK
+            # =============================
             leak, _ = detect_data_leakage(X, y)
             if leak:
                 st.error("⚠️ Data leakage detected")
                 st.stop()
 
-            # Detect problem
+            # =============================
+            # TRAIN
+            # =============================
             problem = detect_problem_type(y)
 
-            # Train models
             results, best_model_name = train_models(X, y, problem)
-
-            # Load best model
             model = joblib.load("models/best_model.pkl")
 
             st.session_state.update({
@@ -521,25 +374,24 @@ elif page == "🤖 AutoML":
                 "feature_schema": X.columns.tolist()
             })
 
-             # ======================================================
-                # 📊 CROSS VALIDATION (FINAL FIX)
-                # ======================================================
-                
-            from sklearn.model_selection import TimeSeriesSplit
-                
-                # Use TimeSeriesSplit for time-based data
-            cv = TimeSeriesSplit(n_splits=5)
-                
+            # =============================
+            # CROSS VALIDATION (STABLE)
+            # =============================
+            from sklearn.model_selection import KFold, StratifiedKFold
+
             if problem == "regression":
+                cv = KFold(n_splits=5, shuffle=True, random_state=42)
                 score = cross_val_score(model, X, y, cv=cv, scoring="r2").mean()
             else:
-                 score = cross_val_score(model, X, y, cv=cv, scoring="accuracy").mean()
-                
+                cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+                score = cross_val_score(model, X, y, cv=cv, scoring="accuracy").mean()
+
             st.success(f"🏆 Best Model: {best_model_name}")
             st.metric("CV Score", f"{score:.4f}")
-            # ======================================================
-            # 🔍 SHAP (SAFE)
-            # ======================================================
+
+            # =============================
+            # SHAP + BUSINESS IMPACT (FIXED)
+            # =============================
             try:
                 explainer = shap.TreeExplainer(model)
                 shap_vals = explainer.shap_values(X)
@@ -547,27 +399,49 @@ elif page == "🤖 AutoML":
                 if isinstance(shap_vals, list):
                     shap_vals = shap_vals[1]
 
-                mean_abs = np.abs(shap_vals).mean(axis=0)
-                top_idx = np.argsort(mean_abs)[::-1][:5]
+                insights = generate_business_impact(
+                    shap_vals, X, y, problem, target   # ✅ FIXED
+                )
 
-                shap_top = [
-                    (X.columns[i], round(float(mean_abs[i]), 4))
-                    for i in top_idx
-                ]
-                st.session_state.shap_top_features = shap_top
-
-                insights = generate_business_impact(shap_vals, X, problem, target)
+                st.session_state.business_insights = insights
 
                 st.subheader("💼 Business Impact")
                 for i in insights:
                     st.info(i)
 
             except:
-                st.warning("SHAP not supported for this model")
+                st.warning("SHAP not supported")
 
-            # Show results table
+            # =============================
+            # RESULTS TABLE
+            # =============================
             st.dataframe(results, use_container_width=True)
 
+            # =============================
+            # MODEL CARD (FOR CHAT FIX)
+            # =============================
+            st.session_state.model_card = {
+                "model": best_model_name,
+                "problem": problem,
+                "rows": df.shape[0],
+                "features": X.shape[1],
+                "target": target,
+                "performance": {"CV Score": round(score, 4)}
+            }
+
+
+
+
+
+
+
+
+
+
+
+
+
+###111111111111111111111111111111111111111111111111
 # ======================================================
 # 🧠 EXPLAINABILITY
 # ======================================================
