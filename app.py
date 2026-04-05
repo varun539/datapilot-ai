@@ -139,7 +139,7 @@ st.sidebar.metric("Columns", df.shape[1])
 # ======================================================
 # 📊 DATA OVERVIEW
 # ======================================================
-    if page == "📊 Data Overview":
+  if page == "📊 Data Overview":
 
     score, level, messages = calculate_data_quality(profile)
 
@@ -201,7 +201,7 @@ st.sidebar.metric("Columns", df.shape[1])
     # =============================
     if api_key and st.button("Suggest Target", key="suggest_target_btn"):
         target = suggest_target_column(api_key, df.columns.tolist(), df)
-        st.success(f"Suggested: {target}")
+        st.success(f"Suggested: {target}")  
     
     
     
