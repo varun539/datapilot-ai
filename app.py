@@ -298,7 +298,6 @@ elif page == "🤖 AutoML":
                 "feature_schema": X.columns.tolist()
             })
 
-            # ✅ CROSS VALIDATION
             from sklearn.model_selection import KFold, StratifiedKFold
 
             if problem == "regression":
@@ -312,7 +311,7 @@ elif page == "🤖 AutoML":
             st.metric("CV Score", f"{score:.4f}")
 
             # =============================
-            # 🔥 SHAP (FIXED UNIVERSAL)
+            # 🔥 SHAP + INTERACTIVE UI
             # =============================
             try:
                 import shap
@@ -322,26 +321,53 @@ elif page == "🤖 AutoML":
 
                 shap_array = shap_vals.values
 
+                # ✅ FIXED ARGUMENTS
                 insights = generate_business_impact(
-                    shap_array, X, y, problem, target
+                    shap_array, X, problem, target
                 )
 
                 st.session_state.business_insights = insights
 
-                st.subheader("💼 Business Impact")
-                for i in insights:
-                    st.info(i)
+                tab1, tab2 = st.tabs(["📊 Feature Importance", "💼 Business Impact"])
+
+                # 📊 FEATURE IMPORTANCE (CLEAN BAR)
+                with tab1:
+                    mean_abs = np.abs(shap_array).mean(axis=0)
+                    imp = pd.Series(mean_abs, index=X.columns).sort_values(ascending=False).head(10)
+
+                    st.bar_chart(imp)
+
+                # 💼 BUSINESS INSIGHTS
+                with tab2:
+                    for i in insights:
+                        st.info(i)
 
             except Exception as e:
                 st.warning(f"SHAP failed: {str(e)}")
 
-            # =============================
-            # RESULTS
-            # =============================
             st.dataframe(results, use_container_width=True)
 
             # =============================
-            # MODEL CARD (CHAT FIX)
+            # 💾 SAVE EXPERIMENT
+            # =============================
+            save_experiment({
+                "model": best_model_name,
+                "score": round(score, 4),
+                "target": target,
+                "rows": df.shape[0]
+            })
+
+            # =============================
+            # 📦 REGISTER MODEL
+            # =============================
+            register_model({
+                "model": best_model_name,
+                "type": problem,
+                "score": round(score, 4)
+            })
+
+            # =============================
+            # MODEL CARD
             # =============================
             st.session_state.model_card = {
                 "model": best_model_name,
@@ -351,11 +377,120 @@ elif page == "🤖 AutoML":
                 "target": target,
                 "performance": {"CV Score": round(score, 4)}
             }
+# elif page == "🤖 AutoML":
 
+#     st.header("🤖 Automated Machine Learning")
+
+#     numeric_targets = df.select_dtypes(include="number").columns.tolist()
+#     target = st.selectbox("🎯 Select Target Column", numeric_targets)
+#     st.session_state.target_col = target
+
+#     if st.button("🚀 Train Models", key="train_btn"):
+
+#         with st.spinner("Training models..."):
+
+#             X = prepare_features(df, profile, target, training=True)
+#             y = pd.to_numeric(df[target], errors="coerce").fillna(df[target].median())
+
+#             leak, _ = detect_data_leakage(X, y)
+#             if leak:
+#                 st.error("⚠️ Data leakage detected")
+#                 st.stop()
+
+#             problem = detect_problem_type(y)
+
+#             results, best_model_name = train_models(X, y, problem)
+#             model = joblib.load("models/best_model.pkl")
+
+#             st.session_state.update({
+#                 "X": X,
+#                 "y": y,
+#                 "model": model,
+#                 "problem_type": problem,
+#                 "feature_schema": X.columns.tolist()
+#             })
+
+#             # ✅ CROSS VALIDATION
+#             from sklearn.model_selection import KFold, StratifiedKFold
+
+#             if problem == "regression":
+#                 cv = KFold(n_splits=5, shuffle=True, random_state=42)
+#                 score = cross_val_score(model, X, y, cv=cv, scoring="r2").mean()
+#             else:
+#                 cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+#                 score = cross_val_score(model, X, y, cv=cv, scoring="accuracy").mean()
+
+#             st.success(f"🏆 Best Model: {best_model_name}")
+#             st.metric("CV Score", f"{score:.4f}")
+
+#             # =============================
+#             # 🔥 SHAP (FIXED UNIVERSAL)
+#             # =============================
+#             try:
+#                 import shap
+
+#                 explainer = shap.Explainer(model, X)
+#                 shap_vals = explainer(X)
+
+#                 shap_array = shap_vals.values
+
+#                 insights = generate_business_impact(
+#                     shap_array, X, y, problem, target
+#                 )
+
+#                 st.session_state.business_insights = insights
+
+#                 st.subheader("💼 Business Impact")
+#                 for i in insights:
+#                     st.info(i)
+
+#             except Exception as e:
+#                 st.warning(f"SHAP failed: {str(e)}")
+
+#             # =============================
+#             # RESULTS
+#             # =============================
+#             st.dataframe(results, use_container_width=True)
+
+#             # =============================
+#             # MODEL CARD (CHAT FIX)
+#             # =============================
+#             st.session_state.model_card = {
+#                 "model": best_model_name,
+#                 "problem": problem,
+#                 "rows": df.shape[0],
+#                 "features": X.shape[1],
+#                 "target": target,
+#                 "performance": {"CV Score": round(score, 4)}
+#             }
 
 # ======================================================
 # 🧠 EXPLAINABILITY
 # ======================================================
+# elif page == "🧠 Explainability":
+
+#     if st.session_state.model is None:
+#         st.warning("Train first")
+#         st.stop()
+
+#     try:
+#         import shap
+
+#         Xs = st.session_state.X.sample(min(200, len(st.session_state.X)))
+
+#         explainer = shap.Explainer(st.session_state.model, Xs)
+#         shap_vals = explainer(Xs)
+
+#         fig = plt.figure()
+#         shap.plots.beeswarm(shap_vals, show=False)
+#         st.pyplot(fig)
+
+#     except Exception as e:
+#         st.error(f"SHAP failed: {str(e)}")
+
+
+
+
 elif page == "🧠 Explainability":
 
     if st.session_state.model is None:
@@ -370,12 +505,17 @@ elif page == "🧠 Explainability":
         explainer = shap.Explainer(st.session_state.model, Xs)
         shap_vals = explainer(Xs)
 
-        fig = plt.figure()
+        st.subheader("📊 SHAP Summary")
+
+        fig = plt.figure(figsize=(10,5))
         shap.plots.beeswarm(shap_vals, show=False)
         st.pyplot(fig)
 
     except Exception as e:
         st.error(f"SHAP failed: {str(e)}")
+
+
+
 
 
 # ======================================================
@@ -410,9 +550,93 @@ elif page == "💬 Chat":
         st.write(response)
 
 
-# ======================================================
-# 🔮 PREDICTION (WITH BULK)
-# ======================================================
+# # ======================================================
+# # 🔮 PREDICTION (WITH BULK)
+# # ======================================================
+# elif page == "🔮 Prediction":
+
+#     if st.session_state.model is None:
+#         st.warning("Train model first")
+#         st.stop()
+
+#     st.subheader("🔮 Single Prediction")
+
+#     schema = st.session_state.feature_schema
+#     inputs = {col: st.number_input(col, 0.0) for col in schema}
+
+#     if st.button("Predict", key="single_pred"):
+#         Xp = pd.DataFrame([inputs])
+#         pred = st.session_state.model.predict(Xp)[0]
+#         st.success(f"Prediction: {round(pred, 2)}")
+
+#     # =============================
+#     # 📂 BULK PREDICTION
+#     # =============================
+#     st.subheader("📂 Bulk Prediction")
+
+#     bulk_file = st.file_uploader("Upload CSV", type=["csv"], key="bulk_file")
+
+#     if bulk_file:
+#         df_bulk = pd.read_csv(bulk_file)
+
+#         try:
+#             X_bulk = prepare_features(
+#                 df_bulk,
+#                 profile,
+#                 target_col=st.session_state.target_col,
+#                 training=False,
+#                 feature_schema=st.session_state.feature_schema
+#             )
+
+#             preds = st.session_state.model.predict(X_bulk)
+
+#             df_bulk["Prediction"] = preds
+
+#             st.success("Bulk prediction done")
+#             st.dataframe(df_bulk.head())
+
+#             csv = df_bulk.to_csv(index=False).encode("utf-8")
+#             st.download_button("Download Predictions", csv, "predictions.csv")
+
+#         except Exception as e:
+#             st.error(f"Bulk prediction failed: {str(e)}")
+
+
+# # ======================================================
+# # 🧪 EXPERIMENTS (FIXED)
+# # ======================================================
+# elif page == "🧪 Experiments":
+
+#     exp = load_experiments()
+
+#     if exp:
+#         st.dataframe(pd.DataFrame(exp), use_container_width=True)
+#     else:
+#         st.info("No experiments")
+
+
+# # ======================================================
+# # 📦 MODELS
+# # ======================================================
+# elif page == "📦 Models":
+#     st.dataframe(pd.DataFrame(get_all_models()))
+
+
+# # ======================================================
+# # ⬇️ DOWNLOADS
+# # ======================================================
+# elif page == "⬇️ Downloads":
+
+#     if os.path.exists("models/best_model.pkl"):
+#         with open("models/best_model.pkl", "rb") as f:
+#             st.download_button("Download Model", f, "model.pkl")
+
+
+
+
+
+
+
 elif page == "🔮 Prediction":
 
     if st.session_state.model is None:
@@ -429,9 +653,6 @@ elif page == "🔮 Prediction":
         pred = st.session_state.model.predict(Xp)[0]
         st.success(f"Prediction: {round(pred, 2)}")
 
-    # =============================
-    # 📂 BULK PREDICTION
-    # =============================
     st.subheader("📂 Bulk Prediction")
 
     bulk_file = st.file_uploader("Upload CSV", type=["csv"], key="bulk_file")
@@ -452,54 +673,67 @@ elif page == "🔮 Prediction":
 
             df_bulk["Prediction"] = preds
 
-            st.success("Bulk prediction done")
             st.dataframe(df_bulk.head())
 
-            csv = df_bulk.to_csv(index=False).encode("utf-8")
-            st.download_button("Download Predictions", csv, "predictions.csv")
+            st.download_button(
+                "Download Predictions",
+                df_bulk.to_csv(index=False),
+                "predictions.csv"
+            )
 
         except Exception as e:
             st.error(f"Bulk prediction failed: {str(e)}")
 
 
-# ======================================================
-# 🧪 EXPERIMENTS (FIXED)
-# ======================================================
+
 elif page == "🧪 Experiments":
 
     exp = load_experiments()
 
     if exp:
-        st.dataframe(pd.DataFrame(exp), use_container_width=True)
+        st.dataframe(pd.DataFrame(exp))
     else:
-        st.info("No experiments")
+        st.info("No experiments yet")
 
 
-# ======================================================
-# 📦 MODELS
-# ======================================================
+
+
 elif page == "📦 Models":
-    st.dataframe(pd.DataFrame(get_all_models()))
+
+    models = get_all_models()
+
+    if models:
+        st.dataframe(pd.DataFrame(models))
+    else:
+        st.info("No models registered")
 
 
-# ======================================================
+
+
+
+======================================================
 # ⬇️ DOWNLOADS
 # ======================================================
 elif page == "⬇️ Downloads":
 
-    if os.path.exists("models/best_model.pkl"):
-        with open("models/best_model.pkl", "rb") as f:
-            st.download_button("Download Model", f, "model.pkl")
+    if st.session_state.model_card:
 
+        if st.button("📄 Generate Report"):
 
+            path = generate_pdf_report(
+                st.session_state.model_card,
+                st.session_state.business_insights or []
+            )
 
+            with open(path, "rb") as f:
+                st.download_button(
+                    "⬇️ Download Report",
+                    f,
+                    "DataPilot_Report.pdf",
+                    "application/pdf"
+                )
 
-
-
-
-
-
-
-
+    else:
+        st.warning("Train a model first")
 
 
