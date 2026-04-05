@@ -1052,13 +1052,22 @@ elif page == "🤖 AutoML":
                 "feature_schema": X.columns.tolist()
             })
 
-            # Cross-validation
-            cv = KFold(5) if problem == "regression" else StratifiedKFold(5)
-            score = cross_val_score(model, X, y, cv=cv).mean()
-
+             # ======================================================
+                # 📊 CROSS VALIDATION (FINAL FIX)
+                # ======================================================
+                
+            from sklearn.model_selection import TimeSeriesSplit
+                
+                # Use TimeSeriesSplit for time-based data
+            cv = TimeSeriesSplit(n_splits=5)
+                
+            if problem == "regression":
+                score = cross_val_score(model, X, y, cv=cv, scoring="r2").mean()
+            else:
+                 score = cross_val_score(model, X, y, cv=cv, scoring="accuracy").mean()
+                
             st.success(f"🏆 Best Model: {best_model_name}")
-            st.metric("Score", f"{score:.4f}")
-
+            st.metric("CV Score", f"{score:.4f}")
             # ======================================================
             # 🔍 SHAP (SAFE)
             # ======================================================
