@@ -984,18 +984,50 @@ elif page == "📈 Visual Analytics":
 # ======================================================
 # 🤖 AUTOML
 # ======================================================
-elif page == "🤖 AutoML":
+# ======================================================
+# 🔥 AUTO TARGET SELECTION (REAL AUT0ML STYLE)
+# ======================================================
 
-    numeric_targets = [
-        c for c in df.columns
-        if pd.api.types.is_numeric_dtype(df[c]) and df[c].nunique() != len(df)
-    ]
+numeric_targets = []
 
-    if not numeric_targets:
-        numeric_targets = df.select_dtypes(include="number").columns.tolist()
+for c in df.columns:
+    try:
+        pd.to_numeric(df[c])
+        numeric_targets.append(c)
+    except:
+        continue
 
-    target = st.selectbox("Target", numeric_targets)
-    st.session_state.target_col = target
+# remove obvious useless columns
+filtered_targets = []
+for c in numeric_targets:
+    col_lower = c.lower()
+
+    if any(k in col_lower for k in ["id", "index", "code", "number"]):
+        continue
+
+    filtered_targets.append(c)
+
+# fallback
+if not filtered_targets:
+    filtered_targets = numeric_targets
+
+target = st.selectbox("🎯 Select Target Column", filtered_targets)
+st.session_state.target_col = target
+
+
+
+# elif page == "🤖 AutoML":
+
+#     numeric_targets = [
+#         c for c in df.columns
+#         if pd.api.types.is_numeric_dtype(df[c]) and df[c].nunique() != len(df)
+#     ]
+
+#     if not numeric_targets:
+#         numeric_targets = df.select_dtypes(include="number").columns.tolist()
+
+#     target = st.selectbox("Target", numeric_targets)
+  #  st.session_state.target_col = target
 
     if st.button("Train"):
 
