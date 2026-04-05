@@ -139,7 +139,7 @@ st.sidebar.metric("Columns", df.shape[1])
 # ======================================================
 # 📊 DATA OVERVIEW
 # ======================================================
-  if page == "📊 Data Overview":
+if page == "📊 Data Overview":
 
     score, level, messages = calculate_data_quality(profile)
 
@@ -183,8 +183,8 @@ st.sidebar.metric("Columns", df.shape[1])
                     found = True
                     break
 
-            if not found:
-                st.info("No strong correlations found")
+           if not found:
+              st.info("No strong correlations found")
 
     # =============================
     # ✅ MISSING VALUES
