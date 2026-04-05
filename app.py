@@ -183,8 +183,8 @@ if page == "📊 Data Overview":
                     found = True
                     break
 
-           if not found:
-              st.info("No strong correlations found")
+                if not found:
+                     st.info("No strong correlations found")
 
     # =============================
     # ✅ MISSING VALUES
