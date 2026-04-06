@@ -4,12 +4,15 @@ import pandas as pd
 
 def generate_business_impact(shap_values, X, problem_type, target_col):
     """
-    Generate business-safe, human-readable insights from SHAP values.
-    NOTE: Insights reflect correlation, not causation.
+    Generate professional, business-safe insights from SHAP values.
+    Focus: statistical patterns, not causal claims.
     """
 
-    # Mean absolute SHAP importance
+    # =============================
+    # FEATURE IMPORTANCE
+    # =============================
     mean_abs_shap = np.abs(shap_values).mean(axis=0)
+
     importance = (
         pd.Series(mean_abs_shap, index=X.columns)
         .sort_values(ascending=False)
@@ -17,29 +20,52 @@ def generate_business_impact(shap_values, X, problem_type, target_col):
 
     insights = []
 
+    # =============================
+    # TOP FEATURES
+    # =============================
     for feat in importance.head(3).index:
 
-        # Direction based on average SHAP contribution
-        avg_effect = shap_values[:, X.columns.get_loc(feat)].mean()
+        # Direction from SHAP
+        feat_idx = X.columns.get_loc(feat)
+        avg_effect = shap_values[:, feat_idx].mean()
 
-        if avg_effect > 0:
-            direction_text = "higher values are associated with higher"
+        # Correlation (extra robustness 🔥)
+        try:
+            corr = np.corrcoef(X[feat], shap_values.mean(axis=1))[0, 1]
+        except:
+            corr = 0
+
+        # =============================
+        # INTERPRET DIRECTION SMARTLY
+        # =============================
+        if abs(corr) < 0.1:
+            relation = "no strong directional relationship"
+        elif corr > 0:
+            relation = "a positive association"
         else:
-            direction_text = "higher values are associated with lower"
+            relation = "a negative association"
 
+        # =============================
+        # REGRESSION INSIGHTS
+        # =============================
         if problem_type == "regression":
+
             insights.append(
-                f"📊 **{feat}** shows a strong statistical association with "
-                f"**{target_col}**. Historically, {direction_text} "
-                f"{target_col} values. "
-                f"This relationship may be influenced by external or economic factors "
-                f"and does not imply causation."
+                f"📊 **{feat}** shows {relation} with **{target_col}** "
+                f"in this dataset. This suggests that variations in this feature "
+                f"are linked to changes in {target_col}, although the relationship "
+                f"may be influenced by external or contextual factors."
             )
+
+        # =============================
+        # CLASSIFICATION INSIGHTS
+        # =============================
         else:
+
             insights.append(
-                f"⚠️ **{feat}** has a strong influence on classification outcomes. "
+                f"⚠️ **{feat}** is a key driver in classification outcomes. "
                 f"Changes in this feature are associated with shifts in predicted "
-                f"classes and should be monitored as part of risk analysis."
+                f"classes and may impact model decisions."
             )
 
     return insights
