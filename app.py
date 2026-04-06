@@ -21,6 +21,8 @@ from src.impact import generate_business_impact
 from src.report import generate_pdf_report
 from src.experiments import log_experiment, load_experiments
 from src.agent import generate_agent_narrative, chat_with_data, suggest_target_column
+from src.experiments import save_experiment, load_experiments
+from src.model_registry import register_model, get_all_models
 
 # ======================================================
 # CONFIG
