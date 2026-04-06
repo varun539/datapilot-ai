@@ -1,25 +1,24 @@
 import json
-import datetime
+import os
 
-EXPERIMENT_LOG = "experiments.json"
+FILE = "experiments.json"
 
-def log_experiment(record):
-    record["timestamp"] = datetime.datetime.now().isoformat()
+def save_experiment(exp):
+    data = []
 
-    try:
-        with open(EXPERIMENT_LOG, "r") as f:
+    if os.path.exists(FILE):
+        with open(FILE, "r") as f:
             data = json.load(f)
-    except:
-        data = []
 
-    data.append(record)
+    data.append(exp)
 
-    with open(EXPERIMENT_LOG, "w") as f:
+    with open(FILE, "w") as f:
         json.dump(data, f, indent=2)
 
+
 def load_experiments():
-    try:
-        with open(EXPERIMENT_LOG, "r") as f:
-            return json.load(f)
-    except:
+    if not os.path.exists(FILE):
         return []
+
+    with open(FILE, "r") as f:
+        return json.load(f)
