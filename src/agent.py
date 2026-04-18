@@ -145,7 +145,6 @@ Sample data:
 
     reply = response.choices[0].message.content
 
-    # save history
     chat_history.append({"role": "user", "content": user_message})
     chat_history.append({"role": "assistant", "content": reply})
 
@@ -153,25 +152,44 @@ Sample data:
 
 
 # ======================================================
-# TARGET SUGGESTION (FIXED 🔥)
+# TARGET SUGGESTION (🔥 FIXED PROPERLY)
 # ======================================================
 def suggest_target_column(api_key: str, columns: list, df_sample: pd.DataFrame) -> str:
-
-    client = get_client(api_key)
 
     if not columns:
         return None
 
-    prompt = f"""
+    # =========================
+    # 🔥 PRIORITY RULES (NO AI NEEDED FIRST)
+    # =========================
+    priority_targets = [
+        "Weekly_Sales",
+        "Sales",
+        "Revenue",
+        "Target",
+        "Price"
+    ]
+
+    for col in columns:
+        if col in priority_targets:
+            return col
+
+    # =========================
+    # 🤖 FALLBACK TO AI
+    # =========================
+    try:
+        client = get_client(api_key)
+
+        prompt = f"""
 Columns: {columns}
 
 Sample:
 {df_sample.head(3).to_string()}
 
-Return ONLY the most likely target column.
+Pick the most likely business target variable.
+Return ONLY column name.
 """
 
-    try:
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
@@ -184,7 +202,6 @@ Return ONLY the most likely target column.
         return result if result in columns else columns[-1]
 
     except:
-        # fallback
         return columns[-1]
 
 
