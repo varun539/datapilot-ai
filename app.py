@@ -8,7 +8,7 @@ import os
 from src.pipeline import prepare_features
 from src.automl import detect_problem_type, train_models
 from src.impact import generate_business_impact
-from src.agent import chat_with_data, suggest_target_column, generate_agent_narrative
+from src.agent import chat_with_data, suggest_target_column
 from src.report import generate_pdf_report
 from src.eda import basic_profile
 
@@ -19,14 +19,20 @@ api_key = os.getenv("OPENAI_API_KEY")
 # =========================
 # SESSION STATE
 # =========================
-for key in ["df", "profile", "X", "y", "model",
-            "problem_type", "target_col",
-            "business_insights", "analyzed"]:
+for key in [
+    "df", "profile", "X", "y", "model",
+    "problem_type", "target_col",
+    "business_insights", "analyzed",
+    "chat_history"
+]:
     if key not in st.session_state:
         st.session_state[key] = None
 
 if st.session_state.analyzed is None:
     st.session_state.analyzed = False
+
+if st.session_state.chat_history is None:
+    st.session_state.chat_history = []
 
 # =========================
 # FILE + DEMO
@@ -123,7 +129,7 @@ target = suggest_target_column(api_key, df.columns.tolist(), df)
 st.info(f"🎯 Target: {target}")
 
 # =========================
-# ANALYZE BUTTON
+# ANALYZE
 # =========================
 if st.button("🚀 Analyze"):
     st.session_state.analyzed = True
@@ -144,7 +150,7 @@ if st.button("🚀 Analyze"):
         "target_col": target
     })
 
-    st.success(f"Best Model: {best_model}")
+    st.success(f"🏆 Best Model: {best_model}")
     st.dataframe(results)
 
     # SHAP
@@ -162,17 +168,20 @@ if st.button("🚀 Analyze"):
         for i in insights:
             st.info(i)
 
-    except:
+    except Exception as e:
         st.warning("SHAP failed")
+        st.write(e)
 
 # =========================
-# SHOW SUMMARY + ALERTS ONLY AFTER ANALYSIS
+# SUMMARY + ALERTS
 # =========================
 if st.session_state.analyzed:
 
     summary = generate_executive_summary(df, target)
 
     if summary:
+        st.subheader("💼 Executive Summary")
+
         col1, col2, col3 = st.columns(3)
         col1.metric("Trend", summary["trend"])
         col2.metric("Change", f"{summary['change']*100:.1f}%")
@@ -180,33 +189,72 @@ if st.session_state.analyzed:
 
     alerts = generate_alerts(df, target)
 
-    for a in alerts:
-        st.warning(a["msg"])
-        st.success(f"👉 {a['action']}")
+    if alerts:
+        st.subheader("🚨 Alerts")
+
+        for a in alerts:
+            st.warning(a["msg"])
+            st.success(f"👉 {a['action']}")
 
 # =========================
-# CHAT (FIXED)
+# 💬 SMART CHAT
 # =========================
-st.subheader("💬 Ask AI")
+st.subheader("💬 Ask DataAgentX")
 
-q = st.text_input("Ask about your data")
+st.markdown("### ⚡ Quick Insights")
 
-if q:
-    try:
-        res = chat_with_data(
-            api_key,
-            q,
-            [],
-            {},
-            {},
-            df,
-            st.session_state.get("problem_type"),
-            st.session_state.get("target_col"),
-            st.session_state.get("business_insights", [])
-        )
-        st.success(res)
-    except:
-        st.warning("Chat failed")
+col1, col2, col3 = st.columns(3)
+
+question = None
+
+if col1.button("📉 Why did sales drop?"):
+    question = "Why did my target decrease recently? Give data-backed reasons."
+
+elif col2.button("📊 What drives my business?"):
+    question = "What are the top factors affecting my target and why?"
+
+elif col3.button("📈 How to increase sales?"):
+    question = "Based on the data, what actions can improve my target?"
+
+col4, col5, col6 = st.columns(3)
+
+if col4.button("⚠️ What are the risks?"):
+    question = "What risks or negative trends should I be aware of?"
+
+elif col5.button("🔮 Future prediction"):
+    question = "What is the likely future trend of my target?"
+
+elif col6.button("💡 Strategic advice"):
+    question = "Give strategic recommendations based on my data."
+
+user_input = st.text_input("Or ask your own question")
+
+if user_input:
+    question = user_input
+
+if question:
+
+    if not st.session_state.analyzed:
+        st.info("⚠️ Run analysis first to enable intelligent insights")
+    else:
+        try:
+            response = chat_with_data(
+                api_key,
+                question,
+                st.session_state.get("chat_history", []),
+                {},
+                {},
+                df,
+                st.session_state.get("problem_type"),
+                st.session_state.get("target_col"),
+                st.session_state.get("business_insights", [])
+            )
+
+            st.success(response)
+
+        except Exception as e:
+            st.error("Chat failed")
+            st.write(e)
 
 # =========================
 # REPORT
