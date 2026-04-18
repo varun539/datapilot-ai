@@ -3,8 +3,11 @@ import pandas as pd
 import numpy as np
 import joblib
 import shap
+import os
 
-# your existing imports (keep same)
+# =========================
+# IMPORTS
+# =========================
 from src.pipeline import prepare_features
 from src.automl import detect_problem_type, train_models
 from src.impact import generate_business_impact
@@ -12,14 +15,19 @@ from src.agent import chat_with_data, suggest_target_column, generate_agent_narr
 from src.report import generate_pdf_report
 from src.eda import basic_profile
 
-# ======================================================
-# PAGE CONFIG
-# ======================================================
+# =========================
+# CONFIG
+# =========================
 st.set_page_config(page_title="DataPilot AI", layout="wide")
 
-# ======================================================
-# SESSION STATE SAFETY
-# ======================================================
+# =========================
+# API KEY (FIX 🔥)
+# =========================
+api_key = os.getenv("OPENAI_API_KEY")
+
+# =========================
+# SESSION STATE
+# =========================
 for key in [
     "X", "y", "model", "problem_type",
     "target_col", "business_insights", "chat_history"
@@ -27,9 +35,9 @@ for key in [
     if key not in st.session_state:
         st.session_state[key] = None
 
-# ======================================================
-# FILE UPLOAD (GLOBAL)
-# ======================================================
+# =========================
+# FILE UPLOAD
+# =========================
 st.sidebar.header("📂 Upload Data")
 file = st.sidebar.file_uploader("Upload CSV", type=["csv"])
 
@@ -39,9 +47,9 @@ if file:
 else:
     df = None
 
-# ======================================================
-# SIDEBAR NAVIGATION
-# ======================================================
+# =========================
+# SIDEBAR
+# =========================
 st.sidebar.title("🚀 DataPilot AI")
 
 dev_mode = st.sidebar.toggle("🧠 Advanced Mode")
@@ -54,7 +62,7 @@ if dev_mode:
 page = st.sidebar.radio("Navigate", pages)
 
 # ======================================================
-# HOME
+# 🏠 HOME
 # ======================================================
 if page == "🏠 Home":
 
@@ -66,15 +74,15 @@ if page == "🏠 Home":
     col2.metric("🤖 AI Powered", "Yes")
     col3.metric("📄 Reports", "1 Click")
 
-    st.info("👉 Upload a dataset from sidebar → go to Dashboard")
+    st.info("👉 Upload dataset → Go to Dashboard")
 
 # ======================================================
-# DASHBOARD
+# 📊 DASHBOARD
 # ======================================================
 elif page == "📊 Dashboard":
 
     if df is None:
-        st.warning("Upload a dataset first")
+        st.warning("Upload dataset first")
         st.stop()
 
     st.header("📊 Business Dashboard")
@@ -86,16 +94,20 @@ elif page == "📊 Dashboard":
 
     st.divider()
 
+    # =========================
     # AUTO TARGET
+    # =========================
     target = suggest_target_column(
-        None,
+        api_key,
         df.columns.tolist(),
         df
     )
 
     st.info(f"🎯 AI selected target: {target}")
 
-    # ANALYZE
+    # =========================
+    # ANALYSIS
+    # =========================
     if st.button("🚀 Analyze My Business", key="analyze_btn"):
 
         with st.spinner("Analyzing..."):
@@ -119,7 +131,9 @@ elif page == "📊 Dashboard":
             st.success(f"🏆 Best Model: {best_model_name}")
             st.dataframe(results, use_container_width=True)
 
-            # SHAP
+            # =========================
+            # SHAP INSIGHTS
+            # =========================
             try:
                 explainer = shap.Explainer(model, X)
                 shap_vals = explainer(X)
@@ -138,21 +152,29 @@ elif page == "📊 Dashboard":
             except Exception:
                 st.warning("SHAP not available")
 
-            # AI SUMMARY
+            # =========================
+            # AI SUMMARY (FIXED)
+            # =========================
             st.subheader("🤖 AI Summary")
 
-            summary = generate_agent_narrative(
-                None,
-                df,
-                results,
-                target,
-                st.session_state.get("business_insights", [])
-            )
+            try:
+                if api_key:
+                    summary = generate_agent_narrative(
+                        api_key,
+                        df,
+                        results,
+                        target,
+                        st.session_state.get("business_insights", [])
+                    )
+                    st.success(summary)
+                else:
+                    st.info("Add OPENAI_API_KEY to enable AI summary")
 
-            st.success(summary)
+            except Exception:
+                st.warning("Could not generate AI summary")
 
 # ======================================================
-# CHAT
+# 💬 CHAT
 # ======================================================
 elif page == "💬 Chat":
 
@@ -166,22 +188,26 @@ elif page == "💬 Chat":
 
     if st.button("Ask", key="ask_btn"):
 
-        response = chat_with_data(
-            None,
-            question,
-            st.session_state.get("chat_history", []),
-            {},
-            {},
-            df,
-            st.session_state.get("problem_type"),
-            st.session_state.get("target_col"),
-            st.session_state.get("business_insights", [])
-        )
+        try:
+            response = chat_with_data(
+                api_key,
+                question,
+                st.session_state.get("chat_history", []),
+                {},
+                {},
+                df,
+                st.session_state.get("problem_type"),
+                st.session_state.get("target_col"),
+                st.session_state.get("business_insights", [])
+            )
 
-        st.write(response)
+            st.write(response)
+
+        except Exception:
+            st.warning("Chat not available (check API key)")
 
 # ======================================================
-# REPORT
+# 📄 REPORT
 # ======================================================
 elif page == "📄 Report":
 
@@ -203,53 +229,47 @@ elif page == "📄 Report":
         st.warning("Run analysis first")
 
 # ======================================================
-# ADVANCED
+# 🧠 ADVANCED
 # ======================================================
 elif page == "🧠 Advanced":
-    st.subheader("Advanced features (hidden for users)")
+    st.subheader("Advanced features (hidden)")
 
 # ======================================================
-# ⚙️ TECHNICAL VIEW (🔥 FOR RECRUITERS)
+# ⚙️ TECHNICAL VIEW
 # ======================================================
 elif page == "⚙️ Technical":
 
-    st.header("⚙️ System Architecture & ML Pipeline")
-
-    st.subheader("🧠 Pipeline Flow")
+    st.header("⚙️ System Architecture")
 
     st.code("""
 User → Upload Data
      ↓
-Feature Engineering (pipeline.py)
+Feature Engineering
      ↓
-AutoML (automl.py)
+AutoML
      ↓
-Best Model Selection
+Best Model
      ↓
 SHAP Explainability
      ↓
-Business Insights (impact.py)
+Business Insights
      ↓
-AI Narrative + Chat (agent.py)
+AI Chat Layer
 """)
 
-    st.subheader("📊 Model Info")
+    st.subheader("Model Info")
+    st.write(type(st.session_state.get("model")))
 
-    if st.session_state.get("model"):
-        st.write(type(st.session_state.model))
-
-    st.subheader("📦 Features Used")
-
+    st.subheader("Features")
     if st.session_state.get("X") is not None:
-        st.write(st.session_state.X.columns.tolist())
+        st.write(st.session_state["X"].columns.tolist())
 
-    st.subheader("📈 Target")
+    st.subheader("Target")
     st.write(st.session_state.get("target_col"))
 
-    st.subheader("🧪 Problem Type")
+    st.subheader("Problem Type")
     st.write(st.session_state.get("problem_type"))
 
-    st.subheader("💬 Business Insights")
-
+    st.subheader("Insights")
     for i in st.session_state.get("business_insights", []) or []:
         st.write("-", i)
