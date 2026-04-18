@@ -272,8 +272,9 @@ if run_analysis:
             # Update profile with processed df
             profile_proc = basic_profile(df_processed)
 
-            X = prepare_features(df_processed, profile_proc, target, training=True)
-            y = pd.to_numeric(df_processed[target], errors="coerce").fillna(df_processed[target].median())
+            # X = prepare_features(df_processed, profile_proc, target, training=True)
+            # y = pd.to_numeric(df_processed[target], errors="coerce").fillna(df_processed[target].median())
+            X, y = prepare_features(df_processed, profile_proc, target, training=True)
 
             problem = detect_problem_type(y)
             results, best_model_name = train_models(X, y, problem)
