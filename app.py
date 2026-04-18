@@ -79,6 +79,8 @@ if st.session_state.analyzed is None:
     st.session_state.analyzed = False
 if st.session_state.chat_history is None:
     st.session_state.chat_history = []
+if "trigger_narrative" not in st.session_state:
+    st.session_state.trigger_narrative = False
 
 # ======================================================
 # HELPER FUNCTIONS
@@ -251,8 +253,27 @@ run_analysis = col_btn1.button("🚀 Analyze", use_container_width=True)
 if run_analysis:
     with st.spinner("Training models and generating insights..."):
         try:
-            X = prepare_features(df, profile, target, training=True)
-            y = pd.to_numeric(df[target], errors="coerce").fillna(df[target].median())
+            # Auto extract date features before pipeline
+            df_processed = df.copy()
+            for col in df_processed.columns:
+                if df_processed[col].dtype == "object":
+                    try:
+                        parsed = pd.to_datetime(df_processed[col], infer_datetime_format=True, errors="coerce")
+                        if parsed.notna().mean() > 0.7:
+                            df_processed[f"{col}_year"]      = parsed.dt.year
+                            df_processed[f"{col}_month"]     = parsed.dt.month
+                            df_processed[f"{col}_week"]      = parsed.dt.isocalendar().week.astype(int)
+                            df_processed[f"{col}_dayofweek"] = parsed.dt.dayofweek
+                            df_processed[f"{col}_is_weekend"]= parsed.dt.dayofweek.isin([5,6]).astype(int)
+                            df_processed.drop(columns=[col], inplace=True)
+                    except:
+                        pass
+
+            # Update profile with processed df
+            profile_proc = basic_profile(df_processed)
+
+            X = prepare_features(df_processed, profile_proc, target, training=True)
+            y = pd.to_numeric(df_processed[target], errors="coerce").fillna(df_processed[target].median())
 
             problem = detect_problem_type(y)
             results, best_model_name = train_models(X, y, problem)
@@ -373,14 +394,18 @@ if st.session_state.analyzed:
         st.divider()
         st.markdown("### 🤖 AI Executive Analysis")
 
-        if st.session_state.agent_narrative:
-            st.markdown(st.session_state.agent_narrative)
-            if st.button("🔄 Regenerate"):
-                st.session_state.agent_narrative = None
-                st.rerun()
-        else:
-            if st.button("✨ Generate AI Analysis"):
-                with st.spinner("GPT-4o analyzing your business data..."):
+        # Auto-generate only when:
+        # 1. First time after analysis (narrative is None)
+        # 2. User clicked Refresh button (trigger_narrative = True)
+        should_generate = (
+            st.session_state.agent_narrative is None or
+            st.session_state.trigger_narrative
+        )
+
+        if should_generate:
+            st.session_state.trigger_narrative = False
+            with st.spinner("GPT-4o generating executive analysis..."):
+                try:
                     narrative = generate_agent_narrative(
                         api_key,
                         st.session_state.model_card,
@@ -391,7 +416,17 @@ if st.session_state.analyzed:
                         st.session_state.target_col
                     )
                     st.session_state.agent_narrative = narrative
-                st.markdown(narrative)
+                except Exception as e:
+                    st.session_state.agent_narrative = f"AI analysis unavailable: {e}"
+
+        # Always display stored narrative — no rerun needed
+        if st.session_state.agent_narrative:
+            st.markdown(st.session_state.agent_narrative)
+
+            col_r1, col_r2 = st.columns([1, 5])
+            if col_r1.button("🔄 Refresh Analysis", key="refresh_narrative"):
+                st.session_state.agent_narrative = None
+                st.session_state.trigger_narrative = True
 
 # ======================================================
 # SMART CHAT
