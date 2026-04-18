@@ -65,20 +65,22 @@ def prepare_features(df, profile, target_col, training=True):
     # =========================
     # DROP NA AFTER LAG (IMPORTANT)
     # =========================
+
+# =========================
+    # DROP NA AFTER LAG
+    # =========================
     df = df.dropna()
-
+    
     # =========================
-    # REMOVE TARGET FROM FEATURES
+    # SPLIT X AND y
     # =========================
-    if target_col not in df.columns:
-        return pd.DataFrame()
-
     y = df[target_col]
     X = df.drop(columns=[target_col])
-
+    
     # =========================
     # FINAL CLEAN
     # =========================
     X = X.fillna(0)
-
-    return X
+    
+    return X, y
+    
