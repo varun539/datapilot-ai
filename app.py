@@ -128,22 +128,27 @@ uploaded = st.sidebar.file_uploader("Upload CSV", type=["csv"])
 if st.sidebar.button("🎯 Walmart Demo"):
     try:
         demo_df = pd.read_csv("https://raw.githubusercontent.com/selva86/datasets/master/Walmart.csv")
-        st.session_state.update({**DEFAULTS,
-            "df": demo_df,
-            "profile": basic_profile(demo_df)
-        })
-        st.rerun()
+        st.session_state.df      = demo_df
+        st.session_state.profile = basic_profile(demo_df)
+        st.session_state.analyzed = False
+        st.session_state.agent_narrative = None
+        st.session_state.model_card = None
+        st.session_state.chat_history = []
     except Exception as e:
         st.sidebar.error(f"Demo failed: {e}")
 
 if uploaded:
     try:
         raw = pd.read_csv(uploaded)
-        st.session_state.update({**DEFAULTS,
-            "df": raw,
-            "profile": basic_profile(raw)
-        })
-        st.rerun()
+        # Only update if new file or different shape
+        if (st.session_state.df is None or
+            st.session_state.df.shape != raw.shape):
+            st.session_state.df      = raw
+            st.session_state.profile = basic_profile(raw)
+            st.session_state.analyzed = False
+            st.session_state.agent_narrative = None
+            st.session_state.model_card = None
+            st.session_state.chat_history = []
     except Exception as e:
         st.sidebar.error(f"Upload failed: {e}")
 
