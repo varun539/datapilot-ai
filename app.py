@@ -216,22 +216,28 @@ if st.session_state.target_col is None:
     auto_target = next((c for c in priority if c in df.columns), df.columns[-1])
     st.session_state.target_col = auto_target
 
-# Smart numeric filter for target
-useless_kw = ["id","uuid","index","row","code","number","name","email","postal","zip"]
+# Show ALL numeric columns — let user choose freely
+# Only skip pure ID columns (Store, Row_ID etc)
+id_only_kw = ["row_id", "customerid", "orderid"]
 numeric_targets = []
 for c in df.columns:
-    cl = c.lower().replace(" ","_")
-    if any(k in cl for k in useless_kw):
+    cl = c.lower().replace(" ", "_")
+    if cl in id_only_kw:
         continue
     if pd.api.types.is_numeric_dtype(df[c]):
-        if df[c].nunique() / len(df) < 0.8:
-            numeric_targets.append(c)
+        numeric_targets.append(c)
 
 if not numeric_targets:
     numeric_targets = df.select_dtypes(include="number").columns.tolist()
 
-default_idx = numeric_targets.index(st.session_state.target_col) \
-    if st.session_state.target_col in numeric_targets else 0
+# Smart default priority
+priority = ["Weekly_Sales", "Sales", "Revenue", "Profit", "Price", "Target"]
+default_col = next(
+    (c for c in priority if c in numeric_targets),
+    st.session_state.target_col if st.session_state.target_col in numeric_targets
+    else numeric_targets[0]
+)
+default_idx = numeric_targets.index(default_col)
 
 target = st.selectbox("Select Target Column", numeric_targets, index=default_idx)
 st.session_state.target_col = target
