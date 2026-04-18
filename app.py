@@ -1,293 +1,111 @@
 import streamlit as st
 import pandas as pd
-import joblib
-import os
 import numpy as np
-import matplotlib.pyplot as plt
+import joblib
 import shap
 
-from sklearn.model_selection import cross_val_score, KFold, StratifiedKFold
-
-# Internal modules
+# your existing imports (keep same)
 from src.pipeline import prepare_features
-from src.data_loader import load_csv
-from src.eda import basic_profile, plot_numeric_distributions, plot_correlation_heatmap
-from src.automl import detect_problem_type, train_models, detect_training_mode, detect_data_leakage
-from src.data_quality import calculate_data_quality
+from src.automl import detect_problem_type, train_models
 from src.impact import generate_business_impact
+from src.agent import chat_with_data, suggest_target_column, generate_agent_narrative
 from src.report import generate_pdf_report
-from src.agent import generate_agent_narrative, chat_with_data, suggest_target_column
-
-# ✅ CLEAN FIXED IMPORTS
-from src.experiments import save_experiment, load_experiments
-from src.model_registry import register_model, get_all_models
+from src.eda import basic_profile
 
 # ======================================================
-# CONFIG
+# PAGE CONFIG
 # ======================================================
-st.set_page_config(page_title="DataPilot AI", layout="wide", page_icon="🚀")
-api_key = st.secrets.get("OPENAI_API_KEY", None)
+st.set_page_config(page_title="DataPilot AI", layout="wide")
 
 # ======================================================
-# CACHE
+# SESSION STATE SAFETY
 # ======================================================
-@st.cache_data
-def load_cached_csv(file):
-    return load_csv(file)
+for key in [
+    "X", "y", "model", "problem_type",
+    "target_col", "business_insights", "chat_history"
+]:
+    if key not in st.session_state:
+        st.session_state[key] = None
 
 # ======================================================
-# SESSION STATE
+# FILE UPLOAD (GLOBAL)
 # ======================================================
-STATE_KEYS = [
-    "X","y","model","problem_type","target_col",
-    "training_mode","feature_schema",
-    "model_card","business_insights","residual_std",
-    "agent_narrative","chat_history","shap_top_features"
-]
+st.sidebar.header("📂 Upload Data")
+file = st.sidebar.file_uploader("Upload CSV", type=["csv"])
 
-for k in STATE_KEYS:
-    st.session_state.setdefault(k, None)
-
-st.session_state.setdefault("chat_history", [])
+if file:
+    df = pd.read_csv(file)
+    profile = basic_profile(df)
+else:
+    df = None
 
 # ======================================================
-# SIDEBAR
+# SIDEBAR NAVIGATION
 # ======================================================
 st.sidebar.title("🚀 DataPilot AI")
-st.sidebar.caption("Agentic AutoML Platform")
 
-if api_key:
-    st.sidebar.success("OpenAI Connected")
-else:
-    st.sidebar.warning("No API key")
+dev_mode = st.sidebar.toggle("🧠 Advanced Mode")
 
-page = st.sidebar.radio("Navigate", [
-    "📊 Data Overview",
-    "📈 Visual Analytics",
-    "🤖 AutoML",
-    "🧠 Explainability",
-    "💬 Chat",
-    "🔮 Prediction",
-    "🧪 Experiments",
-    "📦 Models",
-    "⬇️ Downloads"
-])
+pages = ["🏠 Home", "📊 Dashboard", "💬 Chat", "📄 Report"]
+
+if dev_mode:
+    pages += ["🧠 Advanced", "⚙️ Technical"]
+
+page = st.sidebar.radio("Navigate", pages)
 
 # ======================================================
-# DATA LOAD
+# HOME
 # ======================================================
-st.title("🚀 DataPilot AI")
-uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
+if page == "🏠 Home":
 
-if not uploaded_file:
-    st.info("Upload dataset to begin")
-    st.stop()
+    st.title("🚀 DataPilot AI")
+    st.markdown("### Turn your business data into insights in seconds")
 
-df = load_cached_csv(uploaded_file)
-profile = basic_profile(df)
+    col1, col2, col3 = st.columns(3)
+    col1.metric("📊 Insights", "Instant")
+    col2.metric("🤖 AI Powered", "Yes")
+    col3.metric("📄 Reports", "1 Click")
 
-st.sidebar.metric("Rows", df.shape[0])
-st.sidebar.metric("Columns", df.shape[1])
-
-# ======================================================
-# 📊 DATA OVERVIEW
-# # ======================================================
-# if page == "📊 Data Overview":
-
-#     score, level, messages = calculate_data_quality(profile)
-
-#     st.metric("Quality Score", f"{score}/100")
-#     st.write(level)
-
-#     for m in messages:
-#         st.warning(m)
-
-#     st.dataframe(df.head())
-
-#     # ✅ SAFE CORRELATION
-#     numeric_cols = df.select_dtypes(include=np.number).columns
-
-#     if len(numeric_cols) > 1:
-#         corr = df[numeric_cols].corr().abs()
-#         corr = corr.replace([np.inf, -np.inf], np.nan).fillna(0)
-
-#         if corr.shape[0] > 1:
-#             try:
-#                 np.fill_diagonal(corr.values, 0)
-#             except:
-#                 pass
-
-#             top = corr.unstack().sort_values(ascending=False).drop_duplicates()
-
-#             if not top.empty:
-#                 f1, f2 = top.index[0]
-#                 st.info(f"Strongest relation: {f1} ↔ {f2} ({top.iloc[0]:.2f})")
-#         else:
-#             st.info("Not enough numeric features for correlation.")
-#     else:
-#         st.info("Not enough numeric columns.")
-
-#     # Missing values
-#     missing = df.isnull().sum().sum()
-#     st.warning(f"{missing} missing values") if missing else st.success("No missing values")
-
-#     # AI target suggestion
-#     if api_key and st.button("Suggest Target"):
-#         target = suggest_target_column(api_key, df.columns.tolist(), df)
-#         st.success(f"Suggested: {target}")
+    st.info("👉 Upload a dataset from sidebar → go to Dashboard")
 
 # ======================================================
-# 📊 DATA OVERVIEW
+# DASHBOARD
 # ======================================================
-if page == "📊 Data Overview":
+elif page == "📊 Dashboard":
 
-    score, level, messages = calculate_data_quality(profile)
+    if df is None:
+        st.warning("Upload a dataset first")
+        st.stop()
 
-    st.metric("Quality Score", f"{score}/100")
-    st.write(level)
+    st.header("📊 Business Dashboard")
 
-    for m in messages:
-        st.warning(m)
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Rows", df.shape[0])
+    col2.metric("Columns", df.shape[1])
+    col3.metric("Missing", int(df.isnull().sum().sum()))
 
-    st.dataframe(df.head())
+    st.divider()
 
-    # =============================
-    # ✅ SAFE CORRELATION
-    # =============================
-    numeric_cols = df.select_dtypes(include=np.number).columns
-    
-    if len(numeric_cols) < 2:
-        st.info("Not enough numeric columns for correlation")
-    
-    else:
-        corr = df[numeric_cols].corr()
-    
-        # Clean correlation matrix
-        corr = corr.replace([np.inf, -np.inf], np.nan)
-        corr = corr.dropna(how="all", axis=0).dropna(how="all", axis=1)
-    
-        if corr.shape[0] < 2:
-            st.info("Not enough valid numeric features for correlation")
-    
-        else:
-            # ✅ SAFE diagonal removal
-            for col in corr.columns:
-                if col in corr.index:
-                    corr.loc[col, col] = 0
-    
-            top = corr.abs().unstack().sort_values(ascending=False)
-    
-            found = False
-    
-            for (f1, f2), val in top.items():
-                if f1 != f2:
-                    st.info(f"Strongest relation: {f1} ↔ {f2} ({val:.2f})")
-                    found = True
-                    break
-    
-            if not found:
-                st.info("No strong correlations found")
+    # AUTO TARGET
+    target = suggest_target_column(
+        None,
+        df.columns.tolist(),
+        df
+    )
 
+    st.info(f"🎯 AI selected target: {target}")
 
-    
-    # numeric_cols = df.select_dtypes(include=np.number).columns
+    # ANALYZE
+    if st.button("🚀 Analyze My Business", key="analyze_btn"):
 
-    # if len(numeric_cols) < 2:
-    #     st.info("Not enough numeric columns for correlation")
-
-    # else:
-    #     corr = df[numeric_cols].corr()
-
-    #     # Clean correlation matrix
-    #     corr = corr.replace([np.inf, -np.inf], np.nan)
-    #     corr = corr.dropna(how="all", axis=0).dropna(how="all", axis=1)
-
-    #     if corr.shape[0] < 2:
-    #         st.info("Not enough valid numeric features for correlation")
-
-    #     else:
-    #         np.fill_diagonal(corr.values, 0)
-
-    #         # Get strongest pair
-    #         top = corr.abs().unstack().sort_values(ascending=False)
-
-    #         found = False
-
-    #         for (f1, f2), val in top.items():
-    #             if f1 != f2:
-    #                 st.info(f"Strongest relation: {f1} ↔ {f2} ({val:.2f})")
-    #                 found = True
-    #                 break
-
-    #             if not found:
-    #                  st.info("No strong correlations found")
-    
-    # =============================
-    # ✅ MISSING VALUES
-    # =============================
-    missing = df.isnull().sum().sum()
-
-    if missing:
-        st.warning(f"{missing} missing values")
-    else:
-        st.success("No missing values")
-
-    # =============================
-    # 🤖 AI TARGET SUGGESTION
-    # =============================
-    if api_key and st.button("Suggest Target", key="suggest_target_btn"):
-        target = suggest_target_column(api_key, df.columns.tolist(), df)
-        st.success(f"Suggested: {target}")  
-    
-    
-    
-
-# ======================================================
-# 📈 VISUALS
-# ======================================================
-elif page == "📈 Visual Analytics":
-
-    for fig in plot_numeric_distributions(df, profile["numeric_cols"]):
-        st.pyplot(fig)
-
-    if len(profile["numeric_cols"]) >= 2:
-        st.pyplot(plot_correlation_heatmap(df, profile["numeric_cols"]))
-
-# ======================================================
-# 🤖 AUTOML
-# ======================================================
-# ======================================================
-# 🔥 AUTO TARGET SELECTION (REAL AUT0ML STYLE)
-# ======================================================
-# ======================================================
-# 🤖 AUTOML
-# # ======================================================
-# ======================================================
-# 🤖 AUTOML
-# ======================================================
-elif page == "🤖 AutoML":
-
-    st.header("🤖 Automated Machine Learning")
-
-    numeric_targets = df.select_dtypes(include="number").columns.tolist()
-    target = st.selectbox("🎯 Select Target Column", numeric_targets)
-    st.session_state.target_col = target
-
-    if st.button("🚀 Train Models", key="train_btn"):
-
-        with st.spinner("Training models..."):
+        with st.spinner("Analyzing..."):
 
             X = prepare_features(df, profile, target, training=True)
             y = pd.to_numeric(df[target], errors="coerce").fillna(df[target].median())
 
-            leak, _ = detect_data_leakage(X, y)
-            if leak:
-                st.error("⚠️ Data leakage detected")
-                st.stop()
-
             problem = detect_problem_type(y)
-
             results, best_model_name = train_models(X, y, problem)
+
             model = joblib.load("models/best_model.pkl")
 
             st.session_state.update({
@@ -295,445 +113,143 @@ elif page == "🤖 AutoML":
                 "y": y,
                 "model": model,
                 "problem_type": problem,
-                "feature_schema": X.columns.tolist()
+                "target_col": target
             })
 
-            from sklearn.model_selection import KFold, StratifiedKFold
-
-            if problem == "regression":
-                cv = KFold(n_splits=5, shuffle=True, random_state=42)
-                score = cross_val_score(model, X, y, cv=cv, scoring="r2").mean()
-            else:
-                cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-                score = cross_val_score(model, X, y, cv=cv, scoring="accuracy").mean()
-
             st.success(f"🏆 Best Model: {best_model_name}")
-            st.metric("CV Score", f"{score:.4f}")
+            st.dataframe(results, use_container_width=True)
 
-            # =============================
-            # 🔥 SHAP + INTERACTIVE UI
-            # =============================
+            # SHAP
             try:
-                import shap
-
                 explainer = shap.Explainer(model, X)
                 shap_vals = explainer(X)
 
-                shap_array = shap_vals.values
-
-                # ✅ FIXED ARGUMENTS
                 insights = generate_business_impact(
-                    shap_array, X, problem, target
+                    shap_vals.values, X, problem, target
                 )
+
+                st.subheader("📊 Key Drivers")
+
+                for i in insights:
+                    st.info(i)
 
                 st.session_state.business_insights = insights
 
-                tab1, tab2 = st.tabs(["📊 Feature Importance", "💼 Business Impact"])
+            except Exception:
+                st.warning("SHAP not available")
 
-                # 📊 FEATURE IMPORTANCE (CLEAN BAR)
-                with tab1:
-                    mean_abs = np.abs(shap_array).mean(axis=0)
-                    imp = pd.Series(mean_abs, index=X.columns).sort_values(ascending=False).head(10)
+            # AI SUMMARY
+            st.subheader("🤖 AI Summary")
 
-                    st.bar_chart(imp)
+            summary = generate_agent_narrative(
+                None,
+                df,
+                results,
+                target,
+                st.session_state.get("business_insights", [])
+            )
 
-                # 💼 BUSINESS INSIGHTS
-                with tab2:
-                    for i in insights:
-                        st.info(i)
-
-            except Exception as e:
-                st.warning(f"SHAP failed: {str(e)}")
-
-            st.dataframe(results, use_container_width=True)
-
-            # =============================
-            # 💾 SAVE EXPERIMENT
-            # =============================
-            save_experiment({
-                "model": best_model_name,
-                "score": round(score, 4),
-                "target": target,
-                "rows": df.shape[0]
-            })
-
-            # =============================
-            # 📦 REGISTER MODEL
-            # =============================
-            register_model({
-                "model": best_model_name,
-                "type": problem,
-                "score": round(score, 4)
-            })
-
-            # =============================
-            # MODEL CARD
-            # =============================
-            st.session_state.model_card = {
-                "model": best_model_name,
-                "problem": problem,
-                "rows": df.shape[0],
-                "features": X.shape[1],
-                "target": target,
-                "performance": {"CV Score": round(score, 4)}
-            }
-# elif page == "🤖 AutoML":
-
-#     st.header("🤖 Automated Machine Learning")
-
-#     numeric_targets = df.select_dtypes(include="number").columns.tolist()
-#     target = st.selectbox("🎯 Select Target Column", numeric_targets)
-#     st.session_state.target_col = target
-
-#     if st.button("🚀 Train Models", key="train_btn"):
-
-#         with st.spinner("Training models..."):
-
-#             X = prepare_features(df, profile, target, training=True)
-#             y = pd.to_numeric(df[target], errors="coerce").fillna(df[target].median())
-
-#             leak, _ = detect_data_leakage(X, y)
-#             if leak:
-#                 st.error("⚠️ Data leakage detected")
-#                 st.stop()
-
-#             problem = detect_problem_type(y)
-
-#             results, best_model_name = train_models(X, y, problem)
-#             model = joblib.load("models/best_model.pkl")
-
-#             st.session_state.update({
-#                 "X": X,
-#                 "y": y,
-#                 "model": model,
-#                 "problem_type": problem,
-#                 "feature_schema": X.columns.tolist()
-#             })
-
-#             # ✅ CROSS VALIDATION
-#             from sklearn.model_selection import KFold, StratifiedKFold
-
-#             if problem == "regression":
-#                 cv = KFold(n_splits=5, shuffle=True, random_state=42)
-#                 score = cross_val_score(model, X, y, cv=cv, scoring="r2").mean()
-#             else:
-#                 cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-#                 score = cross_val_score(model, X, y, cv=cv, scoring="accuracy").mean()
-
-#             st.success(f"🏆 Best Model: {best_model_name}")
-#             st.metric("CV Score", f"{score:.4f}")
-
-#             # =============================
-#             # 🔥 SHAP (FIXED UNIVERSAL)
-#             # =============================
-#             try:
-#                 import shap
-
-#                 explainer = shap.Explainer(model, X)
-#                 shap_vals = explainer(X)
-
-#                 shap_array = shap_vals.values
-
-#                 insights = generate_business_impact(
-#                     shap_array, X, y, problem, target
-#                 )
-
-#                 st.session_state.business_insights = insights
-
-#                 st.subheader("💼 Business Impact")
-#                 for i in insights:
-#                     st.info(i)
-
-#             except Exception as e:
-#                 st.warning(f"SHAP failed: {str(e)}")
-
-#             # =============================
-#             # RESULTS
-#             # =============================
-#             st.dataframe(results, use_container_width=True)
-
-#             # =============================
-#             # MODEL CARD (CHAT FIX)
-#             # =============================
-#             st.session_state.model_card = {
-#                 "model": best_model_name,
-#                 "problem": problem,
-#                 "rows": df.shape[0],
-#                 "features": X.shape[1],
-#                 "target": target,
-#                 "performance": {"CV Score": round(score, 4)}
-#             }
+            st.success(summary)
 
 # ======================================================
-# 🧠 EXPLAINABILITY
-# ======================================================
-# elif page == "🧠 Explainability":
-
-#     if st.session_state.model is None:
-#         st.warning("Train first")
-#         st.stop()
-
-#     try:
-#         import shap
-
-#         Xs = st.session_state.X.sample(min(200, len(st.session_state.X)))
-
-#         explainer = shap.Explainer(st.session_state.model, Xs)
-#         shap_vals = explainer(Xs)
-
-#         fig = plt.figure()
-#         shap.plots.beeswarm(shap_vals, show=False)
-#         st.pyplot(fig)
-
-#     except Exception as e:
-#         st.error(f"SHAP failed: {str(e)}")
-
-
-
-
-elif page == "🧠 Explainability":
-
-    if st.session_state.model is None:
-        st.warning("Train first")
-        st.stop()
-
-    try:
-        import shap
-
-        Xs = st.session_state.X.sample(min(200, len(st.session_state.X)))
-
-        explainer = shap.Explainer(st.session_state.model, Xs)
-        shap_vals = explainer(Xs)
-
-        st.subheader("📊 SHAP Summary")
-
-        fig = plt.figure(figsize=(10,5))
-        shap.plots.beeswarm(shap_vals, show=False)
-        st.pyplot(fig)
-
-    except Exception as e:
-        st.error(f"SHAP failed: {str(e)}")
-
-
-
-
-
-# ======================================================
-# 💬 CHAT
+# CHAT
 # ======================================================
 elif page == "💬 Chat":
 
-    if not api_key:
-        st.warning("API key required")
+    if df is None:
+        st.warning("Upload dataset first")
         st.stop()
 
-    st.session_state.setdefault("chat_history", [])
+    st.subheader("💬 Ask Your Data")
 
-    model_card = st.session_state.model_card or {}
+    question = st.text_input("Ask something about your data")
 
-    user_input = st.chat_input("Ask anything...")
-
-    if user_input:
+    if st.button("Ask", key="ask_btn"):
 
         response = chat_with_data(
-            api_key,
-            user_input,
-            st.session_state.chat_history or [],   # ✅ FIX
-            model_card,
-            profile,
+            None,
+            question,
+            st.session_state.get("chat_history", []),
+            {},
+            {},
             df,
-            st.session_state.problem_type,
-            st.session_state.target_col,
-            st.session_state.business_insights or []
+            st.session_state.get("problem_type"),
+            st.session_state.get("target_col"),
+            st.session_state.get("business_insights", [])
         )
 
         st.write(response)
 
-
-# # ======================================================
-# # 🔮 PREDICTION (WITH BULK)
-# # ======================================================
-# elif page == "🔮 Prediction":
-
-#     if st.session_state.model is None:
-#         st.warning("Train model first")
-#         st.stop()
-
-#     st.subheader("🔮 Single Prediction")
-
-#     schema = st.session_state.feature_schema
-#     inputs = {col: st.number_input(col, 0.0) for col in schema}
-
-#     if st.button("Predict", key="single_pred"):
-#         Xp = pd.DataFrame([inputs])
-#         pred = st.session_state.model.predict(Xp)[0]
-#         st.success(f"Prediction: {round(pred, 2)}")
-
-#     # =============================
-#     # 📂 BULK PREDICTION
-#     # =============================
-#     st.subheader("📂 Bulk Prediction")
-
-#     bulk_file = st.file_uploader("Upload CSV", type=["csv"], key="bulk_file")
-
-#     if bulk_file:
-#         df_bulk = pd.read_csv(bulk_file)
-
-#         try:
-#             X_bulk = prepare_features(
-#                 df_bulk,
-#                 profile,
-#                 target_col=st.session_state.target_col,
-#                 training=False,
-#                 feature_schema=st.session_state.feature_schema
-#             )
-
-#             preds = st.session_state.model.predict(X_bulk)
-
-#             df_bulk["Prediction"] = preds
-
-#             st.success("Bulk prediction done")
-#             st.dataframe(df_bulk.head())
-
-#             csv = df_bulk.to_csv(index=False).encode("utf-8")
-#             st.download_button("Download Predictions", csv, "predictions.csv")
-
-#         except Exception as e:
-#             st.error(f"Bulk prediction failed: {str(e)}")
-
-
-# # ======================================================
-# # 🧪 EXPERIMENTS (FIXED)
-# # ======================================================
-# elif page == "🧪 Experiments":
-
-#     exp = load_experiments()
-
-#     if exp:
-#         st.dataframe(pd.DataFrame(exp), use_container_width=True)
-#     else:
-#         st.info("No experiments")
-
-
-# # ======================================================
-# # 📦 MODELS
-# # ======================================================
-# elif page == "📦 Models":
-#     st.dataframe(pd.DataFrame(get_all_models()))
-
-
-# # ======================================================
-# # ⬇️ DOWNLOADS
-# # ======================================================
-# elif page == "⬇️ Downloads":
-
-#     if os.path.exists("models/best_model.pkl"):
-#         with open("models/best_model.pkl", "rb") as f:
-#             st.download_button("Download Model", f, "model.pkl")
-
-
-
-
-
-
-
-elif page == "🔮 Prediction":
-
-    if st.session_state.model is None:
-        st.warning("Train model first")
-        st.stop()
-
-    st.subheader("🔮 Single Prediction")
-
-    schema = st.session_state.feature_schema
-    inputs = {col: st.number_input(col, 0.0) for col in schema}
-
-    if st.button("Predict", key="single_pred"):
-        Xp = pd.DataFrame([inputs])
-        pred = st.session_state.model.predict(Xp)[0]
-        st.success(f"Prediction: {round(pred, 2)}")
-
-    st.subheader("📂 Bulk Prediction")
-
-    bulk_file = st.file_uploader("Upload CSV", type=["csv"], key="bulk_file")
-
-    if bulk_file:
-        df_bulk = pd.read_csv(bulk_file)
-
-        try:
-            X_bulk = prepare_features(
-                df_bulk,
-                profile,
-                target_col=st.session_state.target_col,
-                training=False,
-                feature_schema=st.session_state.feature_schema
-            )
-
-            preds = st.session_state.model.predict(X_bulk)
-
-            df_bulk["Prediction"] = preds
-
-            st.dataframe(df_bulk.head())
-
-            st.download_button(
-                "Download Predictions",
-                df_bulk.to_csv(index=False),
-                "predictions.csv"
-            )
-
-        except Exception as e:
-            st.error(f"Bulk prediction failed: {str(e)}")
-
-
-
-elif page == "🧪 Experiments":
-
-    exp = load_experiments()
-
-    if exp:
-        st.dataframe(pd.DataFrame(exp))
-    else:
-        st.info("No experiments yet")
-
-
-
-
-elif page == "📦 Models":
-
-    models = get_all_models()
-
-    if models:
-        st.dataframe(pd.DataFrame(models))
-    else:
-        st.info("No models registered")
-
-
-
-
-
-### ======================================================
-# ⬇️ DOWNLOADS
 # ======================================================
-elif page == "⬇️ Downloads":
+# REPORT
+# ======================================================
+elif page == "📄 Report":
 
-    if st.session_state.model_card:
+    st.header("📄 Business Report")
+
+    if st.session_state.get("business_insights"):
 
         if st.button("📄 Generate Report"):
 
             path = generate_pdf_report(
-                st.session_state.model_card,
-                st.session_state.business_insights or []
+                {},
+                st.session_state.get("business_insights", [])
             )
 
             with open(path, "rb") as f:
-                st.download_button(
-                    "⬇️ Download Report",
-                    f,
-                    "DataPilot_Report.pdf",
-                    "application/pdf"
-                )
+                st.download_button("⬇️ Download Report", f, "report.pdf")
 
     else:
-        st.warning("Train a model first")
+        st.warning("Run analysis first")
 
+# ======================================================
+# ADVANCED
+# ======================================================
+elif page == "🧠 Advanced":
+    st.subheader("Advanced features (hidden for users)")
 
+# ======================================================
+# ⚙️ TECHNICAL VIEW (🔥 FOR RECRUITERS)
+# ======================================================
+elif page == "⚙️ Technical":
+
+    st.header("⚙️ System Architecture & ML Pipeline")
+
+    st.subheader("🧠 Pipeline Flow")
+
+    st.code("""
+User → Upload Data
+     ↓
+Feature Engineering (pipeline.py)
+     ↓
+AutoML (automl.py)
+     ↓
+Best Model Selection
+     ↓
+SHAP Explainability
+     ↓
+Business Insights (impact.py)
+     ↓
+AI Narrative + Chat (agent.py)
+""")
+
+    st.subheader("📊 Model Info")
+
+    if st.session_state.get("model"):
+        st.write(type(st.session_state.model))
+
+    st.subheader("📦 Features Used")
+
+    if st.session_state.get("X") is not None:
+        st.write(st.session_state.X.columns.tolist())
+
+    st.subheader("📈 Target")
+    st.write(st.session_state.get("target_col"))
+
+    st.subheader("🧪 Problem Type")
+    st.write(st.session_state.get("problem_type"))
+
+    st.subheader("💬 Business Insights")
+
+    for i in st.session_state.get("business_insights", []) or []:
+        st.write("-", i)
