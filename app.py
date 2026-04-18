@@ -238,7 +238,7 @@ if st.button("🚀 Analyze", use_container_width=False):
             y = y.iloc[:min_len].reset_index(drop=True)
 
             # ── Leakage check ─────────────────────────
-            leaky = check_leakage(X, y, threshold=0.95)
+            leaky = check_leakage(X, y, threshold=0.97)
             if leaky:
                 st.warning(f"⚠️ Potential data leakage detected:")
                 for col, corr in leaky:
