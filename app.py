@@ -425,92 +425,130 @@ if st.session_state.analyzed:
 # ======================================================
 # SMART CHAT
 # ======================================================
+
+# ======================================================
+# 💬 SMART CHAT (SAAS FEEL 🔥)
+# ======================================================
 st.divider()
 st.markdown("### 💬 Ask DataAgentX")
 st.caption("Ask anything about your data, model, or business strategy")
 
 if not st.session_state.analyzed:
     st.info("⚠️ Run analysis first to enable intelligent chat")
+
 else:
-    # Quick insight buttons
-    st.markdown("#### ⚡ Quick Insights")
-    cols = st.columns(3)
-    quick_questions = [
-        ("📉 Why did it drop?",        f"Why did {target} decrease recently? Give data-backed reasons."),
-        ("📊 What drives my business?", f"What are the top factors affecting {target} and why?"),
-        ("📈 How to increase?",         f"Based on the data, what actions can improve {target}?"),
-        ("⚠️ What are the risks?",      "What risks or negative trends should I be aware of?"),
-        ("🔮 Future prediction",         f"What is the likely future trend of {target}?"),
-        ("💡 Strategic advice",          "Give 3 strategic recommendations based on my data.")
-    ]
-
-    question = None
-    for i, (label, q) in enumerate(quick_questions):
-        if cols[i % 3].button(label, key=f"q_{i}"):
-            question = q
-
-    # Custom input
-    user_input = st.chat_input("Ask your own question about the data...")
-    if user_input:
-        question = user_input
-
-    # Display chat history
-    if not isinstance(st.session_state.chat_history, list):
+    # =========================
+    # INIT CHAT STATE
+    # =========================
+    if "chat_history" not in st.session_state or st.session_state.chat_history is None:
         st.session_state.chat_history = []
 
+    if "pending_question" not in st.session_state:
+        st.session_state.pending_question = None
+
+    # =========================
+    # SHOW CHAT HISTORY
+    # =========================
     for msg in st.session_state.chat_history:
         with st.chat_message(msg["role"]):
             st.write(msg["content"])
 
-    # Process question
-    if question:
+    # =========================
+    # QUICK QUESTIONS
+    # =========================
+    st.markdown("#### ⚡ Quick Insights")
+
+    cols = st.columns(3)
+    quick_questions = [
+        ("📉 Why did it drop?", f"Why did {target} decrease recently? Give data-backed reasons."),
+        ("📊 What drives my business?", f"What are the top factors affecting {target} and why?"),
+        ("📈 How to increase?", f"Based on the data, what actions can improve {target}?"),
+        ("⚠️ Risks?", "What risks or negative trends should I be aware of?"),
+        ("🔮 Future?", f"What is the likely future trend of {target}?"),
+        ("💡 Strategy?", "Give 3 strategic recommendations based on my data.")
+    ]
+
+    for i, (label, q) in enumerate(quick_questions):
+        if cols[i % 3].button(label, key=f"quick_{i}"):
+            st.session_state.pending_question = q
+
+    # =========================
+    # USER INPUT
+    # =========================
+    user_input = st.chat_input("Ask your own question...")
+
+    if user_input:
+        st.session_state.pending_question = user_input
+
+    # =========================
+    # PROCESS QUESTION (ONLY ONCE)
+    # =========================
+    if st.session_state.pending_question:
+
+        q = st.session_state.pending_question
+
+        # show user message immediately
         with st.chat_message("user"):
-            st.write(question)
+            st.write(q)
 
+        # store user message
+        st.session_state.chat_history.append({
+            "role": "user",
+            "content": q
+        })
+
+        # generate response
         with st.chat_message("assistant"):
-            with st.spinner("Analyzing..."):
-                try:
-                    response = chat_with_data(
-                        api_key, question,
-                        st.session_state.chat_history,
-                        st.session_state.model_card or {},
-                        profile or {},
-                        df,
-                        st.session_state.problem_type,
-                        st.session_state.target_col,
-                        st.session_state.business_insights or []
-                    )
-                    st.write(response)
-                    st.session_state.chat_history.append({"role": "user",      "content": question})
-                    st.session_state.chat_history.append({"role": "assistant", "content": response})
-                except Exception as e:
-                    st.error(f"Chat failed: {e}")
 
+            placeholder = st.empty()
+            full_response = ""
+
+            try:
+                response = chat_with_data(
+                    api_key,
+                    q,
+                    st.session_state.chat_history,
+                    st.session_state.model_card or {},
+                    profile or {},
+                    df,
+                    st.session_state.problem_type,
+                    st.session_state.target_col,
+                    st.session_state.business_insights or []
+                )
+
+                # =========================
+                # ✨ STREAMING EFFECT
+                # =========================
+                for chunk in response.split():
+                    full_response += chunk + " "
+                    placeholder.markdown(full_response + "▌")
+                
+                placeholder.markdown(full_response)
+
+            except Exception as e:
+                full_response = f"Error: {e}"
+                placeholder.error(full_response)
+
+        # store assistant response
+        st.session_state.chat_history.append({
+            "role": "assistant",
+            "content": full_response
+        })
+
+        # clear pending question (VERY IMPORTANT 🔥)
+        st.session_state.pending_question = None
+
+    # =========================
+    # CLEAR CHAT
+    # =========================
     if st.session_state.chat_history:
         if st.button("🗑️ Clear Chat"):
             st.session_state.chat_history = []
+            st.session_state.pending_question = None
             st.rerun()
 
-# ======================================================
-# PDF REPORT
-# ======================================================
-if st.session_state.analyzed:
-    st.divider()
-    if st.button("📄 Download Business Report"):
-        try:
-            insights_for_report = st.session_state.business_insights or []
-            if st.session_state.agent_narrative:
-                insights_for_report = [st.session_state.agent_narrative] + insights_for_report
 
-            path = generate_pdf_report(
-                st.session_state.model_card or {},
-                insights_for_report
-            )
-            with open(path, "rb") as f:
-                st.download_button(
-                    "⬇️ Download PDF Report",
-                    f,
-                    "DataAgentX_Report.pdf"
-                )
-        except Exception as e:
-            st.error(f"Report failed: {e}")
+
+
+
+
