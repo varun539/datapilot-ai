@@ -11,17 +11,12 @@ def prepare_features(
     max_corr=0.95
 ):
     """
-    Universal feature pipeline for:
-    - Training
-    - Prediction
-    - SHAP
-
-    Smart column handling:
-    - Drops ID/useless columns by keyword
-    - Drops high cardinality text (City, State, Product Name etc)
-    - Keeps useful categoricals (Region, Segment, Category, Ship Mode)
-    - Handles datetime columns safely
-    - One-hot encodes only low cardinality categoricals (<=20 unique)
+    Clean, safe feature pipeline:
+    - Drops ID-like columns (including Store 🔥)
+    - Handles datetime
+    - Encodes categorical safely
+    - Prevents leakage
+    - Removes high correlation
     """
 
     # ======================================================
@@ -30,13 +25,14 @@ def prepare_features(
     df = df_raw.copy()
 
     # ======================================================
-    # 2 DROP ID / USELESS COLUMNS BY KEYWORD
+    # 2 DROP ID / USELESS COLUMNS (🔥 FIXED)
     # ======================================================
     id_keywords = [
         "id", "uuid", "index", "code", "number",
         "name", "email", "phone", "address",
         "zip", "postal", "order", "invoice",
-        "row", "record", "key", "ref", "reference"
+        "row", "record", "key", "ref", "reference",
+        "store"   # 🔥 IMPORTANT FIX
     ]
 
     drop_cols = []
@@ -52,20 +48,18 @@ def prepare_features(
             drop_cols.append(col)
             continue
 
-        # Drop country if all same value (zero variance)
-        if col_lower == "country":
-            if df[col].nunique() <= 1:
-                drop_cols.append(col)
+        # Drop constant columns
+        if df[col].nunique() <= 1:
+            drop_cols.append(col)
             continue
 
-        # High cardinality text — City, State, Product Name etc
+        # High-cardinality text
         if df[col].dtype == "object":
-            n_unique = df[col].nunique(dropna=False)
-            if n_unique > 50:
+            if df[col].nunique() > 50:
                 drop_cols.append(col)
                 continue
 
-        # Near-unique numeric — likely an ID column
+        # Near-unique numeric (ID-like)
         if training and pd.api.types.is_numeric_dtype(df[col]):
             if df[col].nunique() / len(df) > 0.98:
                 drop_cols.append(col)
@@ -74,9 +68,7 @@ def prepare_features(
     df.drop(columns=list(set(drop_cols)), errors="ignore", inplace=True)
 
     # ======================================================
-    # 3 DATETIME FEATURE ENGINEERING
-    # Extracts year, month, week, day, dayofweek, is_weekend
-    # Drops raw date columns after extraction
+    # 3 DATETIME FEATURES
     # ======================================================
     datetime_cols = profile.get("datetime_cols", [])
 
@@ -86,17 +78,17 @@ def prepare_features(
 
         df[col] = pd.to_datetime(df[col], errors="coerce")
 
-        df[f"{col}_year"]       = df[col].dt.year.astype("Int64")
-        df[f"{col}_month"]      = df[col].dt.month.astype("Int64")
-        df[f"{col}_week"]       = df[col].dt.isocalendar().week.astype("Int64")
-        df[f"{col}_day"]        = df[col].dt.day.astype("Int64")
-        df[f"{col}_dayofweek"]  = df[col].dt.dayofweek.astype("Int64")
+        df[f"{col}_year"] = df[col].dt.year.astype("Int64")
+        df[f"{col}_month"] = df[col].dt.month.astype("Int64")
+        df[f"{col}_week"] = df[col].dt.isocalendar().week.astype("Int64")
+        df[f"{col}_day"] = df[col].dt.day.astype("Int64")
+        df[f"{col}_dayofweek"] = df[col].dt.dayofweek.astype("Int64")
         df[f"{col}_is_weekend"] = df[col].dt.dayofweek.isin([5, 6]).astype(int)
 
     df.drop(columns=datetime_cols, errors="ignore", inplace=True)
 
     # ======================================================
-    # 4 FEATURE TYPE SEPARATION
+    # 4 FEATURE TYPES
     # ======================================================
     numeric_cols = [
         c for c in df.columns
@@ -111,7 +103,7 @@ def prepare_features(
     ]
 
     # ======================================================
-    # 5 MISSING VALUE HANDLING
+    # 5 MISSING VALUES
     # ======================================================
     for col in numeric_cols:
         df[col] = df[col].fillna(df[col].median())
@@ -120,7 +112,7 @@ def prepare_features(
         df[col] = df[col].fillna("Unknown")
 
     # ======================================================
-    # 6 REMOVE HIGHLY CORRELATED FEATURES (TRAIN ONLY)
+    # 6 REMOVE HIGH CORRELATION
     # ======================================================
     if training and len(numeric_cols) > 1:
         corr = df[numeric_cols].corr().abs()
@@ -135,9 +127,11 @@ def prepare_features(
         numeric_cols = [c for c in numeric_cols if c not in drop_corr]
 
     # ======================================================
-    # 7 BASE FEATURE FRAME
+    # 7 BUILD FEATURE FRAME (🔥 FIXED TARGET SAFETY)
     # ======================================================
     feature_cols = numeric_cols + categorical_cols
+    feature_cols = [c for c in feature_cols if c != target_col]  # 🔥 FIX
+
     X = df[feature_cols].copy()
 
     if X.shape[1] == 0:
@@ -146,22 +140,15 @@ def prepare_features(
         return pd.DataFrame(index=df.index)
 
     # ======================================================
-    # 8 ONE-HOT ENCODING — SMART
-    #
-    # KEPT (<=20 unique values):
-    #   Region (4), Segment (3), Category (3),
-    #   Sub-Category (17), Ship Mode (4)
-    #
-    # DROPPED (>20 unique values):
-    #   Ship Date (1000+), City (500+), State (49)
+    # 8 ONE-HOT ENCODING
     # ======================================================
     if categorical_cols:
         safe_categorical = []
         for col in categorical_cols:
             if col not in X.columns:
                 continue
-            n_unique = X[col].nunique()
-            if n_unique <= 20:
+
+            if X[col].nunique() <= 20:
                 safe_categorical.append(col)
             else:
                 X.drop(columns=[col], errors="ignore", inplace=True)
@@ -175,8 +162,7 @@ def prepare_features(
     X = X.apply(pd.to_numeric, errors="coerce").fillna(0)
 
     # ======================================================
-    # 10 SCHEMA ALIGNMENT (PREDICTION ONLY)
-    # Ensures prediction input matches training feature set
+    # 10 SCHEMA ALIGNMENT
     # ======================================================
     if not training and feature_schema is not None:
         for col in feature_schema:
