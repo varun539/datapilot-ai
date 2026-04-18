@@ -50,6 +50,7 @@ if st.sidebar.button("Use Demo Dataset"):
     st.session_state.df = df
     st.session_state.profile = profile
     st.session_state.analyzed = False
+    st.session_state.target_col = None  # reset target
 
 if file:
     df = pd.read_csv(file)
@@ -58,6 +59,7 @@ if file:
     st.session_state.df = df
     st.session_state.profile = profile
     st.session_state.analyzed = False
+    st.session_state.target_col = None  # reset target
 
 df = st.session_state.get("df")
 profile = st.session_state.get("profile")
@@ -125,8 +127,23 @@ if df is None:
 
 st.subheader("📊 Dashboard")
 
-target = suggest_target_column(api_key, df.columns.tolist(), df)
-st.info(f"🎯 Target: {target}")
+# =========================
+# 🎯 TARGET FIX (LOCK + SELECT)
+# =========================
+if st.session_state.target_col is None:
+    st.session_state.target_col = suggest_target_column(
+        api_key,
+        df.columns.tolist(),
+        df
+    )
+
+target = st.selectbox(
+    "🎯 Select Target Column",
+    df.columns,
+    index=df.columns.get_loc(st.session_state.target_col)
+)
+
+st.session_state.target_col = target
 
 # =========================
 # ANALYZE
