@@ -74,7 +74,7 @@ Write a concise business-level explanation (max 300 words).
 
 # ======================================================
 # CHAT FIXED (🔥 MAIN BUG FIX HERE)
-# ======================================================
+
 def chat_with_data(
     api_key: str,
     user_message: str,
@@ -87,106 +87,90 @@ def chat_with_data(
     business_insights: list
 ) -> str:
 
-    client = get_client(api_key)
+    from openai import OpenAI
 
-    # ✅ CRITICAL FIXES
+    client = OpenAI(api_key=api_key)
+
+    # =========================
+    # SAFE DEFAULTS
+    # =========================
     chat_history = chat_history or []
-    model_card = model_card or {}
     business_insights = business_insights or []
 
+    cols = df_sample.columns.tolist()
+    sample = df_sample.head(3).to_dict()
+
+    insights_text = "\n".join(business_insights) if business_insights else "No insights available"
+
+    # =========================
+    # 🔥 SYSTEM PROMPT (FINAL)
+    # =========================
     system_prompt = f"""
-You are DataPilot AI.
+You are a senior business data analyst and strategy consultant.
 
-DATASET:
-- Rows: {model_card.get('rows', 'unknown')}
-- Features: {model_card.get('features', 'unknown')}
-- Target: {target_col}
-- Problem: {problem_type}
+STRICT RULES:
+- Only use the provided dataset context
+- Do NOT hallucinate or assume anything not in data
+- Base answers on patterns, trends, and insights
+- Speak like a business advisor (clear, concise, professional)
 
-MODEL: {model_card.get('model', 'unknown')}
-PERFORMANCE: {json.dumps(model_card.get('performance', {}))}
+Always structure your answer like:
 
-SAMPLE:
-{df_sample.head(3).to_string()}
+📊 Insight:
+(what is happening)
 
-INSIGHTS:
-{chr(10).join(business_insights) if business_insights else "None"}
+📉 Explanation:
+(why it is happening based on data)
 
-Answer clearly and concisely.
+💡 Action:
+(what should be done)
+
+CONTEXT:
+Target variable: {target_col}
+Problem type: {problem_type}
+
+Available columns:
+{cols}
+
+Key model insights:
+{insights_text}
+
+Sample data:
+{sample}
 """
 
-    # ✅ FIXED MESSAGE BUILDING
-    messages = [{"role": "system", "content": system_prompt}]
-    messages.extend(chat_history)   # SAFE NOW
-    messages.append({"role": "user", "content": user_message})
+    # =========================
+    # USER MESSAGE
+    # =========================
+    user_prompt = f"Question: {user_message}"
 
+    # =========================
+    # BUILD MESSAGE FLOW
+    # =========================
+    messages = [{"role": "system", "content": system_prompt}]
+    messages.extend(chat_history)
+    messages.append({"role": "user", "content": user_prompt})
+
+    # =========================
+    # CALL MODEL
+    # =========================
     response = client.chat.completions.create(
-        model="gpt-4o",
+        model="gpt-4o-mini",
         messages=messages,
         temperature=0.3,
-        max_tokens=300
+        max_tokens=400
     )
 
     reply = response.choices[0].message.content
 
-    # ✅ SAVE CHAT HISTORY (IMPORTANT)
+    # =========================
+    # SAVE HISTORY
+    # =========================
     chat_history.append({"role": "user", "content": user_message})
     chat_history.append({"role": "assistant", "content": reply})
 
     return reply
 
 
-# ======================================================
-# TARGET SUGGESTION
-# ======================================================
-def suggest_target_column(api_key: str, columns: list, df_sample: pd.DataFrame) -> str:
-
-    client = get_client(api_key)
-
-    prompt = f"""
-Columns: {columns}
-Sample:
-{df_sample.head(3).to_string()}
-
-Which is target column? Return ONLY column name.
-"""
-
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0,
-        max_tokens=50
-    )
-
-    suggested = response.choices[0].message.content.strip()
-
-    return suggested if suggested in columns else columns[-1]
 
 
-# ======================================================
-# DATASET DIAGNOSIS
-# ======================================================
-def diagnose_dataset(
-    api_key: str,
-    profile: dict,
-    quality_score: int,
-    quality_messages: list
-) -> str:
-
-    client = get_client(api_key)
-
-    prompt = f"""
-Score: {quality_score}/100
-Issues: {quality_messages}
-
-Give 3 bullet insights.
-"""
-
-    response = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.3,
-        max_tokens=150
-    )
-
-    return response.choices[0].message.content
