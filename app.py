@@ -19,9 +19,14 @@ api_key = os.getenv("OPENAI_API_KEY")
 # =========================
 # SESSION STATE
 # =========================
-for key in ["df", "profile", "X", "y", "model", "problem_type", "target_col", "business_insights"]:
+for key in ["df", "profile", "X", "y", "model",
+            "problem_type", "target_col",
+            "business_insights", "analyzed"]:
     if key not in st.session_state:
         st.session_state[key] = None
+
+if st.session_state.analyzed is None:
+    st.session_state.analyzed = False
 
 # =========================
 # FILE + DEMO
@@ -35,14 +40,18 @@ st.sidebar.markdown("### 🎯 Try Demo")
 if st.sidebar.button("Use Demo Dataset"):
     df = pd.read_csv("https://raw.githubusercontent.com/selva86/datasets/master/Walmart.csv")
     profile = basic_profile(df)
-    st.session_state["df"] = df
-    st.session_state["profile"] = profile
+
+    st.session_state.df = df
+    st.session_state.profile = profile
+    st.session_state.analyzed = False
 
 if file:
     df = pd.read_csv(file)
     profile = basic_profile(df)
-    st.session_state["df"] = df
-    st.session_state["profile"] = profile
+
+    st.session_state.df = df
+    st.session_state.profile = profile
+    st.session_state.analyzed = False
 
 df = st.session_state.get("df")
 profile = st.session_state.get("profile")
@@ -114,29 +123,10 @@ target = suggest_target_column(api_key, df.columns.tolist(), df)
 st.info(f"🎯 Target: {target}")
 
 # =========================
-# EXEC SUMMARY
-# =========================
-summary = generate_executive_summary(df, target)
-
-if summary:
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Trend", summary["trend"])
-    col2.metric("Change", f"{summary['change']*100:.1f}%")
-    col3.metric("Risk", summary["risk"])
-
-# =========================
-# ALERTS
-# =========================
-alerts = generate_alerts(df, target)
-
-for a in alerts:
-    st.warning(a["msg"])
-    st.success(f"👉 {a['action']}")
-
-# =========================
-# ANALYSIS
+# ANALYZE BUTTON
 # =========================
 if st.button("🚀 Analyze"):
+    st.session_state.analyzed = True
 
     X = prepare_features(df, profile, target, training=True)
     y = pd.to_numeric(df[target], errors="coerce").fillna(df[target].median())
@@ -146,6 +136,14 @@ if st.button("🚀 Analyze"):
 
     model = joblib.load("models/best_model.pkl")
 
+    st.session_state.update({
+        "X": X,
+        "y": y,
+        "model": model,
+        "problem_type": problem,
+        "target_col": target
+    })
+
     st.success(f"Best Model: {best_model}")
     st.dataframe(results)
 
@@ -154,8 +152,13 @@ if st.button("🚀 Analyze"):
         explainer = shap.Explainer(model, X)
         shap_vals = explainer(X)
 
-        insights = generate_business_impact(shap_vals.values, X, problem, target)
+        insights = generate_business_impact(
+            shap_vals.values, X, problem, target
+        )
 
+        st.session_state.business_insights = insights
+
+        st.subheader("📊 Key Drivers")
         for i in insights:
             st.info(i)
 
@@ -163,7 +166,26 @@ if st.button("🚀 Analyze"):
         st.warning("SHAP failed")
 
 # =========================
-# CHAT
+# SHOW SUMMARY + ALERTS ONLY AFTER ANALYSIS
+# =========================
+if st.session_state.analyzed:
+
+    summary = generate_executive_summary(df, target)
+
+    if summary:
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Trend", summary["trend"])
+        col2.metric("Change", f"{summary['change']*100:.1f}%")
+        col3.metric("Risk", summary["risk"])
+
+    alerts = generate_alerts(df, target)
+
+    for a in alerts:
+        st.warning(a["msg"])
+        st.success(f"👉 {a['action']}")
+
+# =========================
+# CHAT (FIXED)
 # =========================
 st.subheader("💬 Ask AI")
 
@@ -171,7 +193,17 @@ q = st.text_input("Ask about your data")
 
 if q:
     try:
-        res = chat_with_data(api_key, q, [], {}, {}, df, None, target, [])
+        res = chat_with_data(
+            api_key,
+            q,
+            [],
+            {},
+            {},
+            df,
+            st.session_state.get("problem_type"),
+            st.session_state.get("target_col"),
+            st.session_state.get("business_insights", [])
+        )
         st.success(res)
     except:
         st.warning("Chat failed")
@@ -180,6 +212,7 @@ if q:
 # REPORT
 # =========================
 if st.button("📄 Generate Report"):
-    path = generate_pdf_report({}, [])
+    path = generate_pdf_report({}, st.session_state.get("business_insights", []))
+
     with open(path, "rb") as f:
         st.download_button("Download Report", f)
