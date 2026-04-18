@@ -4,8 +4,8 @@ import pandas as pd
 
 def generate_business_impact(shap_values, X, problem_type, target_col):
     """
-    Generate professional, business-safe insights from SHAP values.
-    Focus: statistical patterns, not causal claims.
+    Clean, business-friendly insights from SHAP values.
+    Focus: clarity + usefulness + no misleading claims.
     """
 
     # =============================
@@ -25,47 +25,49 @@ def generate_business_impact(shap_values, X, problem_type, target_col):
     # =============================
     for feat in importance.head(3).index:
 
-        # Direction from SHAP
         feat_idx = X.columns.get_loc(feat)
         avg_effect = shap_values[:, feat_idx].mean()
 
-        # Correlation (extra robustness 🔥)
+        # Direction from SHAP (primary signal)
+        if abs(avg_effect) < 1e-4:
+            direction = "has minimal impact on"
+        elif avg_effect > 0:
+            direction = "is associated with higher"
+        else:
+            direction = "is associated with lower"
+
+        # Optional correlation (secondary signal, safer use)
         try:
             corr = np.corrcoef(X[feat], shap_values.mean(axis=1))[0, 1]
         except:
             corr = 0
 
-        # =============================
-        # INTERPRET DIRECTION SMARTLY
-        # =============================
-        if abs(corr) < 0.1:
-            relation = "no strong directional relationship"
-        elif corr > 0:
-            relation = "a positive association"
+        # Confidence level (UX improvement 🔥)
+        if abs(corr) > 0.3:
+            confidence = "strong pattern"
+        elif abs(corr) > 0.1:
+            confidence = "moderate pattern"
         else:
-            relation = "a negative association"
+            confidence = "weak pattern"
 
         # =============================
-        # REGRESSION INSIGHTS
+        # REGRESSION OUTPUT
         # =============================
         if problem_type == "regression":
 
             insights.append(
-                f"📊 **{feat}** shows {relation} with **{target_col}** "
-                f"in this dataset. This suggests that variations in this feature "
-                f"are linked to changes in {target_col}, although the relationship "
-                f"may be influenced by external or contextual factors."
+                f"📊 **{feat}** {direction} **{target_col}** "
+                f"({confidence} observed in the data)."
             )
 
         # =============================
-        # CLASSIFICATION INSIGHTS
+        # CLASSIFICATION OUTPUT
         # =============================
         else:
 
             insights.append(
-                f"⚠️ **{feat}** is a key driver in classification outcomes. "
-                f"Changes in this feature are associated with shifts in predicted "
-                f"classes and may impact model decisions."
+                f"⚠️ **{feat}** influences classification outcomes "
+                f"({confidence}). Changes in this feature affect predictions."
             )
 
     return insights
