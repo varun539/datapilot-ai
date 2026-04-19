@@ -305,8 +305,8 @@ if st.button("🚀 Analyze", use_container_width=False):
 if st.session_state.analyzed:
     mc   = st.session_state.model_card or {}
     perf = mc.get("performance", {})
-    disp_df = st.session_state.processed_df or df
-
+    # disp_df = st.session_state.processed_df or df
+    disp_df = st.session_state.processed_df if st.session_state.processed_df is not None else df
     # Model Performance
     st.divider()
     st.markdown("### 🏆 Model Performance")
@@ -401,7 +401,8 @@ else:
     if not isinstance(st.session_state.chat_history, list):
         st.session_state.chat_history = []
 
-    disp_df = st.session_state.processed_df or df
+   # disp_df = st.session_state.processed_df or df
+    disp_df = st.session_state.processed_df if st.session_state.processed_df is not None else df
 
     # Quick buttons using pending_question pattern (no refresh bug!)
     st.markdown("#### ⚡ Quick Insights")
