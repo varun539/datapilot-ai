@@ -14,7 +14,7 @@ from src.report import generate_pdf_report
 from src.eda import basic_profile
 
 # 🔥 NEW (adaptive)
-from adaptive_preprocess import adaptive_preprocess
+from src.adaptive_preprocess import adaptive_preprocess
 
 # ======================================================
 # CONFIG
