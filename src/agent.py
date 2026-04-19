@@ -58,17 +58,21 @@ Keep it concise (~120–150 words).
 Make it sound like a paid consultant.
 """
 
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": "You are a senior business consultant."},
-            {"role": "user", "content": context}
-        ],
-        temperature=0.4,
-        max_tokens=300
-    )
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You are a senior business consultant."},
+                {"role": "user", "content": context}
+            ],
+            temperature=0.4,
+            max_tokens=300
+        )
 
-    return response.choices[0].message.content
+        return response.choices[0].message.content
+
+    except Exception:
+        return "⚠️ Unable to generate executive summary right now."
 
 
 # ======================================================
@@ -99,37 +103,41 @@ def chat_with_data(
 
     insights_text = "\n".join(business_insights) if business_insights else "No insights yet"
 
+    # ======================================================
+    # 🔥 CONSULTANT PROMPT (UPGRADED)
+    # ======================================================
     system_prompt = f"""
-You are a senior business advisor (top consulting firm level).
+You are a senior business consultant and growth strategist.
 
 STRICT RULES:
-- No technical jargon
-- No ML terms
-- No guessing
-- Only use provided data
+- Do NOT speak like a chatbot
+- Do NOT give generic advice
+- Be direct, decisive, and actionable
+- Speak like you are advising a business owner who needs to act NOW
+- Prioritize business impact over explanation
 
-Always respond in this format:
+Always respond in this structure:
 
 📊 Insight:
-(what is happening)
+What is happening (clear and blunt)
 
-📉 Explanation:
-(why based on data)
+📉 Why it matters:
+Business impact (money, growth, risk)
 
 💡 Action:
-(what to do next — concrete steps)
+Concrete steps (specific, practical, aggressive)
 
-⚠️ Risk:
-(optional — what could go wrong)
+⚠️ Priority:
+Explain urgency briefly (1 line)
 
-BUSINESS CONTEXT:
+CONTEXT:
 Target: {target_col}
-Problem: {problem_type}
+Problem type: {problem_type}
 
-Available columns:
+Columns:
 {cols}
 
-Key insights:
+Insights:
 {insights_text}
 
 Sample data:
@@ -140,19 +148,24 @@ Sample data:
     messages.extend(chat_history)
     messages.append({"role": "user", "content": user_message})
 
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=messages,
-        temperature=0.3,
-        max_tokens=350
-    )
+    # ======================================================
+    # CALL MODEL (SAFE)
+    # ======================================================
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=messages,
+            temperature=0.3,
+            max_tokens=350
+        )
 
-    reply = response.choices[0].message.content
+        reply = response.choices[0].message.content
 
-    # ✅ SAVE CHAT HISTORY SAFELY
-    if isinstance(chat_history, list):
-        chat_history.append({"role": "user", "content": user_message})
-        chat_history.append({"role": "assistant", "content": reply})
+    except Exception:
+        reply = "⚠️ AI temporarily unavailable. Please try again."
+
+    # ❗ IMPORTANT: DO NOT SAVE CHAT HISTORY HERE
+    # handled in app.py
 
     return reply
 
@@ -174,7 +187,6 @@ def suggest_target_column(api_key, columns, df_sample):
         if col in columns:
             return col
 
-    # AI fallback
     try:
         client = get_client(api_key)
 
@@ -199,7 +211,7 @@ Return ONLY the column name.
 
         return result if result in columns else columns[-1]
 
-    except:
+    except Exception:
         return columns[-1]
 
 
@@ -222,11 +234,15 @@ No technical language.
 Speak like a consultant helping a small business.
 """
 
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.3,
-        max_tokens=150
-    )
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3,
+            max_tokens=150
+        )
 
-    return response.choices[0].message.content
+        return response.choices[0].message.content
+
+    except Exception:
+        return "⚠️ Unable to analyze dataset quality right now."
