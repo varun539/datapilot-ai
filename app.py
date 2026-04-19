@@ -107,7 +107,7 @@ if st.button("🚀 Run Analysis"):
 
             problem = detect_problem_type(y)
 
-            results, model, metrics = train_models(X, y, problem)
+            model, model_name, metrics = train_models(X, y, problem)
 
             # SHAP
             try:
@@ -127,7 +127,7 @@ if st.button("🚀 Run Analysis"):
                 "business_insights": insights,
                 "processed_df": processed_df,
                 "model_card": {
-                    "model": type(model).__name__,
+                    "model": model_name,
                     "features": X.shape[1],
                     "metrics": metrics
                 },
@@ -142,30 +142,20 @@ if st.button("🚀 Run Analysis"):
 # ======================================================
 # RESULTS
 # ======================================================
-if st.session_state.analyzed:
-
-    mc = st.session_state.model_card
-    metrics = mc.get("metrics", {})
-
-    st.divider()
-    st.subheader("🏆 Model Summary")
-
-    c1, c2 = st.columns(2)
-    c1.metric("Model", mc.get("model", "-"))
-    c2.metric("Features", mc.get("features", "-"))
-
-    st.subheader("📈 Metrics")
-
+    hold = metrics.get("holdout", {})
+    cv   = metrics.get("cv", {})
+    
     if st.session_state.problem_type == "regression":
-        st.write(f"R²: {round(metrics.get('r2', 0), 4)}")
-        st.write(f"MAE: {round(metrics.get('mae', 0), 2)}")
-        st.write(f"RMSE: {round(metrics.get('rmse', 0), 2)}")
+        st.write(f"R²: {round(hold.get('r2', 0), 4)}")
+        st.write(f"MAE: {round(hold.get('mae', 0), 2)}")
+        st.write(f"RMSE: {round(hold.get('rmse', 0), 2)}")
     else:
-        st.write(f"Accuracy: {round(metrics.get('accuracy', 0), 4)}")
-        st.write(f"F1 Score: {round(metrics.get('f1', 0), 4)}")
-
-    st.write(f"CV Mean: {round(metrics.get('cv_mean', 0), 4)}")
-    st.write(f"CV Std: {round(metrics.get('cv_std', 0), 4)}")
+        st.write(f"Accuracy: {round(hold.get('accuracy', 0), 4)}")
+        st.write(f"F1 Score: {round(hold.get('f1', 0), 4)}")
+    
+    st.write(f"CV Mean: {round(cv.get('mean', 0), 4)}")
+    st.write(f"CV Std: {round(cv.get('std', 0), 4)}")
+    
 
     # ======================================================
     # INSIGHTS
