@@ -3,27 +3,26 @@ import numpy as np
 
 
 # ======================================================
-# 🎯 MAIN FEATURE PIPELINE (FINAL)
+# 🎯 MAIN FEATURE PIPELINE
 # ======================================================
 def prepare_features(df, profile, target_col, training=True, feature_schema=None):
     """
-    🐐 BUSINESS-READY FEATURE PIPELINE
+    Business-ready feature pipeline
 
     ✔ No leakage
-    ✔ Works for Shopify / Retail / Generic datasets
-    ✔ Keeps real business signals (orders, quantity, AOV)
-    ✔ Stable + production-safe
+    ✔ Stable
+    ✔ Works for retail / generic datasets
     """
 
     df = df.copy()
 
     # ======================================================
-    # 1. BASIC CLEAN
+    # 1. CLEAN
     # ======================================================
     df = df.replace([np.inf, -np.inf], np.nan)
 
     # ======================================================
-    # 2. VALIDATE TARGET
+    # 2. TARGET VALIDATION
     # ======================================================
     if target_col not in df.columns:
         return pd.DataFrame(), pd.Series()
@@ -31,13 +30,13 @@ def prepare_features(df, profile, target_col, training=True, feature_schema=None
     df[target_col] = pd.to_numeric(df[target_col], errors="coerce")
     df = df.dropna(subset=[target_col])
 
+    if df[target_col].nunique() <= 1:
+        return pd.DataFrame(), pd.Series()
+
     # ======================================================
-    # 3. DROP HIGH-RISK / ID COLUMNS
+    # 3. DROP ID / LEAKAGE COLUMNS
     # ======================================================
-    drop_keywords = [
-        "id", "uuid", "invoice", "transaction",
-        "row", "index"
-    ]
+    drop_keywords = ["id", "uuid", "invoice", "transaction", "row", "index"]
 
     drop_cols = []
 
@@ -50,22 +49,18 @@ def prepare_features(df, profile, target_col, training=True, feature_schema=None
         if any(k in name for k in drop_keywords):
             drop_cols.append(col)
 
-        # ❌ REMOVE STORE (prevents memorization)
         if name == "store":
             drop_cols.append(col)
 
     df.drop(columns=drop_cols, errors="ignore", inplace=True)
 
     # ======================================================
-    # 4. DATE FEATURE EXTRACTION (ROBUST)
+    # 4. DATE FEATURES
     # ======================================================
     date_col = None
 
     for col in df.columns:
-        if col == target_col:
-            continue
-
-        if "date" in col.lower():
+        if col != target_col and "date" in col.lower():
             date_col = col
             break
 
@@ -73,30 +68,27 @@ def prepare_features(df, profile, target_col, training=True, feature_schema=None
         parsed = pd.to_datetime(df[date_col], errors="coerce")
 
         if parsed.notna().mean() > 0.7:
-
             df["year"] = parsed.dt.year
             df["month"] = parsed.dt.month
             df["dayofweek"] = parsed.dt.dayofweek
             df["week"] = parsed.dt.isocalendar().week.astype(int)
-
             df["is_weekend"] = parsed.dt.dayofweek.isin([5, 6]).astype(int)
 
-            # 🔥 SEASONAL ENCODING
+            # seasonality
             df["month_sin"] = np.sin(2 * np.pi * df["month"] / 12)
             df["month_cos"] = np.cos(2 * np.pi * df["month"] / 12)
 
             df.drop(columns=[date_col], inplace=True)
 
     # ======================================================
-    # 5. SPLIT TARGET
+    # 5. SPLIT
     # ======================================================
     y = df[target_col]
     X = df.drop(columns=[target_col])
 
     # ======================================================
-    # 6. PRESERVE BUSINESS SIGNALS (CRITICAL)
+    # 6. BUSINESS FEATURES
     # ======================================================
-    # These columns = real drivers (DON'T DROP)
     business_cols = ["Revenue", "Orders", "Quantity", "Avg_Order_Value"]
 
     for col in business_cols:
@@ -104,7 +96,7 @@ def prepare_features(df, profile, target_col, training=True, feature_schema=None
             X[f"log_{col}"] = np.log1p(X[col].clip(lower=0))
 
     # ======================================================
-    # 7. CONTROLLED INTERACTIONS (SMART)
+    # 7. INTERACTIONS (LIMITED)
     # ======================================================
     important = [c for c in ["Orders", "Quantity", "Avg_Order_Value"] if c in X.columns]
 
@@ -118,13 +110,11 @@ def prepare_features(df, profile, target_col, training=True, feature_schema=None
     # ======================================================
     # 8. NUMERIC CLEAN
     # ======================================================
-    numeric_cols = X.select_dtypes(include=np.number).columns
-
-    for col in numeric_cols:
+    for col in X.select_dtypes(include=np.number).columns:
         X[col] = pd.to_numeric(X[col], errors="coerce")
 
     # ======================================================
-    # 9. CATEGORICAL ENCODING (SAFE)
+    # 9. CATEGORICAL ENCODING
     # ======================================================
     cat_cols = X.select_dtypes(include="object").columns.tolist()
 
@@ -141,11 +131,24 @@ def prepare_features(df, profile, target_col, training=True, feature_schema=None
     X = X.replace([np.inf, -np.inf], 0)
 
     # ======================================================
-    # 11. FEATURE SCHEMA ALIGNMENT (DEPLOYMENT SAFE)
+    # 11. LOW VARIANCE FILTER
+    # ======================================================
+    from sklearn.feature_selection import VarianceThreshold
+
+    try:
+        selector = VarianceThreshold(threshold=0.0)
+        X = pd.DataFrame(
+            selector.fit_transform(X),
+            columns=X.columns[selector.get_support()]
+        )
+    except:
+        pass  # safe fallback
+
+    # ======================================================
+    # 12. SCHEMA ALIGNMENT
     # ======================================================
     if training:
         feature_schema = X.columns.tolist()
-
     else:
         if feature_schema is not None:
             for col in feature_schema:
@@ -154,18 +157,3 @@ def prepare_features(df, profile, target_col, training=True, feature_schema=None
             X = X[feature_schema]
 
     return X, y
-
-
-# ADD THIS AT END
-
-from sklearn.feature_selection import VarianceThreshold
-
-selector = VarianceThreshold(threshold=0.0)
-X = pd.DataFrame(
-    selector.fit_transform(X),
-    columns=X.columns[selector.get_support()]
-)
-
-# 🔒 Target safety
-if y.nunique() <= 1:
-    return pd.DataFrame(), pd.Series()
