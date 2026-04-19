@@ -228,11 +228,15 @@ if st.button("🚀 Analyze", use_container_width=False):
         try:
             proc_profile = basic_profile(processed_df)
 
-            # Pipeline returns X, y
-            X, y = prepare_features(
-                processed_df, proc_profile, target, training=True
-            )
+            # # Pipeline returns X, y
+            # X, y = prepare_features(
+            #     processed_df, proc_profile, target, training=True
+            # )
+            X, y = prepare_features(df, profile, target)
+                
+            st.session_state.feature_schema = X.columns.tolist()
 
+            
             # Safety
             X = X.select_dtypes(include=[np.number]).fillna(0)
             X = X.replace([np.inf, -np.inf], 0)
