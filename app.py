@@ -1,3 +1,17 @@
+st.set_page_config(page_title="DataAgentX", layout="wide")
+
+st.markdown(
+    """
+    <style>
+    html, body, [class*="css"]  {
+        scroll-behavior: smooth;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -173,37 +187,11 @@ if st.session_state.analyzed:
     for i in st.session_state.business_insights:
         st.info(i)
 
+
+
+
+
     # ======================================================
-    # ALERTS
-    # ======================================================
-    st.subheader("🚨 Smart Alerts")
-
-    df_disp = st.session_state.processed_df if st.session_state.processed_df is not None else df
-
-    alerts = []
-
-    if target in df_disp.columns:
-        vals = df_disp[target].dropna()
-
-        if len(vals) > 10:
-            if vals.tail(5).mean() < vals.mean():
-                alerts.append("📉 Trend declining")
-
-            if vals.std() > 0.5 * vals.mean():
-                alerts.append("⚠️ High volatility")
-
-    if alerts:
-        for a in alerts:
-            st.error(a)
-    else:
-        st.success("✅ No major risks")
-
-# ======================================================
-# CHAT
-# # ==========================================
-
-
-# ======================================================
 # 💬 CHAT (FINAL FIX)
 # ======================================================
 st.subheader("💬 Ask AI")
@@ -281,6 +269,38 @@ if st.session_state.analyzed:
             "content": response
         })
 
+
+
+
+
+    # ======================================================
+    # ALERTS
+    # ======================================================
+    st.subheader("🚨 Smart Alerts")
+
+    df_disp = st.session_state.processed_df if st.session_state.processed_df is not None else df
+
+    alerts = []
+
+    if target in df_disp.columns:
+        vals = df_disp[target].dropna()
+
+        if len(vals) > 10:
+            if vals.tail(5).mean() < vals.mean():
+                alerts.append("📉 Trend declining")
+
+            if vals.std() > 0.5 * vals.mean():
+                alerts.append("⚠️ High volatility")
+
+    if alerts:
+        for a in alerts:
+            st.error(a)
+    else:
+        st.success("✅ No major risks")
+
+# ======================================================
+# CHAT
+# # ==========================================
 
 
 
