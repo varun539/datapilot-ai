@@ -65,6 +65,32 @@ if df is None:
     st.info("👈 Upload dataset to start")
     st.stop()
 
+
+# ======================================================
+# 🚀 ONBOARDING
+# ======================================================
+if not st.session_state.analyzed:
+
+    st.markdown("## 🚀 Welcome to DataAgentX")
+
+    st.markdown("""
+### 💡 What this does:
+Upload your business data → get AI insights → take action
+
+### ⚡ In few minutes s you will:
+✔ Understand what drives your revenue  
+✔ Detect risks in your business  
+✔ Get clear actions to improve  
+
+### 📂 What data works best:
+- Shopify exports  
+- Sales / revenue CSV  
+- Order-level data (better insights)
+""")
+
+    st.info("👉 Click **Analyze** after uploading your data")
+
+    st.divider()
 # ======================================================
 # 🧠 DATA DETECTION
 # ======================================================
@@ -221,33 +247,92 @@ if st.session_state.analyzed:
     for i in st.session_state.business_insights:
         st.info(i)
 
+
+
+# ======================================================
+# 📈 FUTURE OUTLOOK (SMART FORECAST)
+# ======================================================
+if st.session_state.analyzed and target.lower() == "revenue":
+
+    st.subheader("🔮 Future Outlook")
+
+    df_disp = st.session_state.processed_df
+
+    if "Revenue" in df_disp.columns:
+
+        recent_avg = df_disp["Revenue"].tail(7).mean()
+        overall_avg = df_disp["Revenue"].mean()
+
+        change_pct = ((recent_avg - overall_avg) / max(overall_avg, 1)) * 100
+
+        if change_pct > 10:
+            st.success(f"📈 Revenue trending UP (+{change_pct:.1f}%)")
+        elif change_pct < -10:
+            st.error(f"📉 Revenue trending DOWN ({change_pct:.1f}%)")
+        else:
+            st.info("➡️ Revenue is stable")
+
+        st.markdown("### 💡 Forecast Insight")
+
+        st.write(f"""
+- Recent performance suggests a **{abs(change_pct):.1f}% change**
+- If trend continues, near-term revenue will likely remain {'higher' if change_pct>0 else 'lower' if change_pct<0 else 'stable'}
+- This is a directional forecast, not exact prediction
+""")
+
 # ======================================================
 # 💬 CHAT (NO REFRESH BUG)
 # ======================================================
 
-st.markdown("### ⚡ Quick Business Questions")
+# st.markdown("### ⚡ Quick Business Questions")
+
+# col1, col2, col3 = st.columns(3)
+
+# if col1.button("📉 Why did revenue drop?"):
+#     user_input = f"Why did {target} decrease recently?"
+
+# elif col2.button("📊 What drives revenue?"):
+#     user_input = f"What are the top drivers of {target}?"
+
+# elif col3.button("📈 How to increase revenue?"):
+#     user_input = f"What actions will increase {target}?"
+
+# col4, col5, col6 = st.columns(3)
+
+# if col4.button("⚠️ What risks exist?"):
+#     user_input = "What risks or negative trends should I be aware of?"
+
+# elif col5.button("🎯 Where should I focus?"):
+#     user_input = "Where should I focus to maximize business impact?"
+
+# elif col6.button("💰 Improve profitability"):
+#     user_input = "How can I improve profitability based on this data?"
+
+st.markdown("### ⚡ Business Decisions")
 
 col1, col2, col3 = st.columns(3)
 
-if col1.button("📉 Why did revenue drop?"):
-    user_input = f"Why did {target} decrease recently?"
+if col1.button("📉 Why is revenue dropping?"):
+    user_input = "Why is revenue dropping and what should I fix immediately?"
 
-elif col2.button("📊 What drives revenue?"):
-    user_input = f"What are the top drivers of {target}?"
+elif col2.button("💰 How to increase revenue fast?"):
+    user_input = "What actions will quickly increase revenue?"
 
-elif col3.button("📈 How to increase revenue?"):
-    user_input = f"What actions will increase {target}?"
+elif col3.button("⚠️ Biggest risk right now?"):
+    user_input = "What is the biggest business risk right now?"
 
 col4, col5, col6 = st.columns(3)
 
-if col4.button("⚠️ What risks exist?"):
-    user_input = "What risks or negative trends should I be aware of?"
+if col4.button("🎯 Where to focus?"):
+    user_input = "Where should I focus for maximum impact?"
 
-elif col5.button("🎯 Where should I focus?"):
-    user_input = "Where should I focus to maximize business impact?"
+elif col5.button("📈 Growth strategy"):
+    user_input = "Give me a growth strategy based on this data"
 
-elif col6.button("💰 Improve profitability"):
-    user_input = "How can I improve profitability based on this data?"
+elif col6.button("🔥 Immediate actions"):
+    user_input = "What should I do TODAY to improve results?"
+
+
 
 
 st.subheader("💬 Ask AI")
