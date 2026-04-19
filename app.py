@@ -4,14 +4,6 @@ import numpy as np
 import shap
 import os
 
-# from src.pipeline import prepare_features
-# from src.automl import detect_problem_type, train_models
-# from src.impact import generate_business_impact
-# from src.agent import chat_with_data
-# from src.eda import basic_profile
-# from src.adaptive_preprocess import adaptive_preprocess
-
-
 from src.pipeline import prepare_features
 from src.automl import detect_problem_type, train_models
 from src.impact import generate_business_impact
