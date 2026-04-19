@@ -1,16 +1,3 @@
-st.set_page_config(page_title="DataAgentX", layout="wide")
-
-st.markdown(
-    """
-    <style>
-    html, body, [class*="css"]  {
-        scroll-behavior: smooth;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-
 
 import streamlit as st
 import pandas as pd
