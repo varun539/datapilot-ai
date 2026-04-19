@@ -154,3 +154,18 @@ def prepare_features(df, profile, target_col, training=True, feature_schema=None
             X = X[feature_schema]
 
     return X, y
+
+
+# ADD THIS AT END
+
+from sklearn.feature_selection import VarianceThreshold
+
+selector = VarianceThreshold(threshold=0.0)
+X = pd.DataFrame(
+    selector.fit_transform(X),
+    columns=X.columns[selector.get_support()]
+)
+
+# 🔒 Target safety
+if y.nunique() <= 1:
+    return pd.DataFrame(), pd.Series()
