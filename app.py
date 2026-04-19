@@ -165,8 +165,15 @@ if st.button("🚀 Analyze"):
 # ======================================================
 # RESULTS
 # ======================================================
+
+# ======================================================
+# RESULTS + CHAT (FIXED STRUCTURE)
+# ======================================================
 if st.session_state.analyzed:
 
+    # -------------------------
+    # MODEL + INSIGHTS
+    # -------------------------
     st.subheader("🏆 Model Summary")
     st.write(st.session_state.model_card)
 
@@ -174,16 +181,10 @@ if st.session_state.analyzed:
     for i in st.session_state.business_insights:
         st.info(i)
 
-
-
-
-
-    # ======================================================
-# 💬 CHAT (FINAL FIX)
-# ======================================================
-st.subheader("💬 Ask AI")
-
-if st.session_state.analyzed:
+    # -------------------------
+    # 💬 CHAT (INSIDE analyzed block ONLY)
+    # -------------------------
+    st.subheader("💬 Ask AI")
 
     # INIT
     if "chat_history" not in st.session_state:
@@ -194,33 +195,38 @@ if st.session_state.analyzed:
         with st.chat_message(msg["role"]):
             st.write(msg["content"])
 
-    # USER INPUT
-    user_input = st.chat_input("Ask about your business")
-
-    # QUICK BUTTONS (NO pending_question anymore)
+    # QUICK BUTTONS (SET INPUT)
     st.markdown("### ⚡ Business Decisions")
 
     col1, col2, col3 = st.columns(3)
 
+    btn_input = None
+
     if col1.button("📉 Why is revenue dropping?"):
-        user_input = "Why is revenue dropping and what should I fix immediately?"
+        btn_input = "Why is revenue dropping and what should I fix immediately?"
 
     elif col2.button("💰 How to increase revenue fast?"):
-        user_input = "What actions will quickly increase revenue?"
+        btn_input = "What actions will quickly increase revenue?"
 
     elif col3.button("⚠️ Biggest risk right now?"):
-        user_input = "What is the biggest business risk right now?"
+        btn_input = "What is the biggest business risk right now?"
 
     col4, col5, col6 = st.columns(3)
 
     if col4.button("🎯 Where to focus?"):
-        user_input = "Where should I focus for maximum impact?"
+        btn_input = "Where should I focus for maximum impact?"
 
     elif col5.button("📈 Growth strategy"):
-        user_input = "Give me a growth strategy based on this data"
+        btn_input = "Give me a growth strategy based on this data"
 
     elif col6.button("🔥 Immediate actions"):
-        user_input = "What should I do TODAY to improve results?"
+        btn_input = "What should I do TODAY to improve results?"
+
+    # INPUT (chat OR button)
+    user_input = st.chat_input("Ask about your business")
+
+    if btn_input:
+        user_input = btn_input
 
     # PROCESS INPUT
     if user_input:
@@ -237,6 +243,7 @@ if st.session_state.analyzed:
         # AI RESPONSE
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
+
                 response = chat_with_data(
                     api_key,
                     user_input,
@@ -248,6 +255,7 @@ if st.session_state.analyzed:
                     st.session_state.target_col,
                     st.session_state.business_insights
                 )
+
                 st.write(response)
 
         # SAVE RESPONSE
@@ -256,21 +264,21 @@ if st.session_state.analyzed:
             "content": response
         })
 
-
-
-
-
-    # ======================================================
-    # ALERTS
-    # ======================================================
+    # -------------------------
+    # 🚨 ALERTS (AFTER CHAT)
+    # -------------------------
     st.subheader("🚨 Smart Alerts")
 
-    df_disp = st.session_state.processed_df if st.session_state.processed_df is not None else df
+    df_disp = (
+        st.session_state.processed_df
+        if st.session_state.processed_df is not None
+        else df
+    )
 
     alerts = []
 
-    if target in df_disp.columns:
-        vals = df_disp[target].dropna()
+    if st.session_state.target_col in df_disp.columns:
+        vals = df_disp[st.session_state.target_col].dropna()
 
         if len(vals) > 10:
             if vals.tail(5).mean() < vals.mean():
@@ -284,6 +292,9 @@ if st.session_state.analyzed:
             st.error(a)
     else:
         st.success("✅ No major risks")
+
+
+
 
 # ======================================================
 # CHAT
