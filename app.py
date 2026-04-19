@@ -27,7 +27,8 @@ DEFAULTS = {
     "problem_type": None, "target_col": None,
     "business_insights": None, "analyzed": False,
     "chat_history": [], "model_card": {},
-    "processed_df": None
+    "processed_df": None,
+    "pending_question": None
 }
 for k, v in DEFAULTS.items():
     if k not in st.session_state:
@@ -65,19 +66,17 @@ if df is None:
     st.info("👈 Upload dataset to start")
     st.stop()
 
-
 # ======================================================
 # 🚀 ONBOARDING
 # ======================================================
 if not st.session_state.analyzed:
-
     st.markdown("## 🚀 Welcome to DataAgentX")
 
     st.markdown("""
 ### 💡 What this does:
 Upload your business data → get AI insights → take action
 
-### ⚡ In few minutes s you will:
+### ⚡ In a few minutes you will:
 ✔ Understand what drives your revenue  
 ✔ Detect risks in your business  
 ✔ Get clear actions to improve  
@@ -89,8 +88,8 @@ Upload your business data → get AI insights → take action
 """)
 
     st.info("👉 Click **Analyze** after uploading your data")
-
     st.divider()
+
 # ======================================================
 # 🧠 DATA DETECTION
 # ======================================================
@@ -148,7 +147,7 @@ if mode == "🧠 CEO Dashboard":
 
     st.divider()
 
-    if churn_rate and churn_rate > 0.4:
+    if churn_rate is not None and churn_rate > 0.4:
         st.error("⚠️ High churn is hurting growth")
     elif total_revenue < revenue_df["Revenue"].median():
         st.warning("📉 Revenue unstable")
@@ -247,10 +246,39 @@ if st.session_state.analyzed:
     for i in st.session_state.business_insights:
         st.info(i)
 
+# ======================================================
+# 🚨 ALERT SYSTEM
+# ======================================================
+if st.session_state.analyzed:
 
+    st.subheader("🚨 Smart Alerts")
+
+    df_disp = st.session_state.processed_df
+    alerts = []
+
+    if "Revenue" in df_disp.columns:
+        recent = df_disp["Revenue"].tail(7).mean()
+        overall = df_disp["Revenue"].mean()
+
+        if recent < 0.8 * overall:
+            alerts.append("📉 Revenue dropped significantly in recent days")
+
+        if df_disp["Revenue"].std() > 0.5 * df_disp["Revenue"].mean():
+            alerts.append("⚠️ Revenue is highly unstable")
+
+    if "churn" in df_disp.columns:
+        churn_rate = df_disp["churn"].mean()
+        if churn_rate > 0.4:
+            alerts.append("🚨 High customer churn detected")
+
+    if alerts:
+        for a in alerts:
+            st.error(a)
+    else:
+        st.success("✅ No major risks detected")
 
 # ======================================================
-# 📈 FUTURE OUTLOOK (SMART FORECAST)
+# 🔮 FUTURE OUTLOOK
 # ======================================================
 if st.session_state.analyzed and target.lower() == "revenue":
 
@@ -258,82 +286,44 @@ if st.session_state.analyzed and target.lower() == "revenue":
 
     df_disp = st.session_state.processed_df
 
-    if "Revenue" in df_disp.columns:
+    recent_avg = df_disp["Revenue"].tail(7).mean()
+    overall_avg = df_disp["Revenue"].mean()
 
-        recent_avg = df_disp["Revenue"].tail(7).mean()
-        overall_avg = df_disp["Revenue"].mean()
+    change_pct = ((recent_avg - overall_avg) / max(overall_avg, 1)) * 100
 
-        change_pct = ((recent_avg - overall_avg) / max(overall_avg, 1)) * 100
-
-        if change_pct > 10:
-            st.success(f"📈 Revenue trending UP (+{change_pct:.1f}%)")
-        elif change_pct < -10:
-            st.error(f"📉 Revenue trending DOWN ({change_pct:.1f}%)")
-        else:
-            st.info("➡️ Revenue is stable")
-
-        st.markdown("### 💡 Forecast Insight")
-
-        st.write(f"""
-- Recent performance suggests a **{abs(change_pct):.1f}% change**
-- If trend continues, near-term revenue will likely remain {'higher' if change_pct>0 else 'lower' if change_pct<0 else 'stable'}
-- This is a directional forecast, not exact prediction
-""")
+    if change_pct > 10:
+        st.success(f"📈 Revenue trending UP (+{change_pct:.1f}%)")
+    elif change_pct < -10:
+        st.error(f"📉 Revenue trending DOWN ({change_pct:.1f}%)")
+    else:
+        st.info("➡️ Revenue is stable")
 
 # ======================================================
-# 💬 CHAT (NO REFRESH BUG)
+# 💬 CHAT
 # ======================================================
-
-# st.markdown("### ⚡ Quick Business Questions")
-
-# col1, col2, col3 = st.columns(3)
-
-# if col1.button("📉 Why did revenue drop?"):
-#     user_input = f"Why did {target} decrease recently?"
-
-# elif col2.button("📊 What drives revenue?"):
-#     user_input = f"What are the top drivers of {target}?"
-
-# elif col3.button("📈 How to increase revenue?"):
-#     user_input = f"What actions will increase {target}?"
-
-# col4, col5, col6 = st.columns(3)
-
-# if col4.button("⚠️ What risks exist?"):
-#     user_input = "What risks or negative trends should I be aware of?"
-
-# elif col5.button("🎯 Where should I focus?"):
-#     user_input = "Where should I focus to maximize business impact?"
-
-# elif col6.button("💰 Improve profitability"):
-#     user_input = "How can I improve profitability based on this data?"
-
 st.markdown("### ⚡ Business Decisions")
 
 col1, col2, col3 = st.columns(3)
 
 if col1.button("📉 Why is revenue dropping?"):
-    user_input = "Why is revenue dropping and what should I fix immediately?"
+    st.session_state.pending_question = "Why is revenue dropping and what should I fix immediately?"
 
 elif col2.button("💰 How to increase revenue fast?"):
-    user_input = "What actions will quickly increase revenue?"
+    st.session_state.pending_question = "What actions will quickly increase revenue?"
 
 elif col3.button("⚠️ Biggest risk right now?"):
-    user_input = "What is the biggest business risk right now?"
+    st.session_state.pending_question = "What is the biggest business risk right now?"
 
 col4, col5, col6 = st.columns(3)
 
 if col4.button("🎯 Where to focus?"):
-    user_input = "Where should I focus for maximum impact?"
+    st.session_state.pending_question = "Where should I focus for maximum impact?"
 
 elif col5.button("📈 Growth strategy"):
-    user_input = "Give me a growth strategy based on this data"
+    st.session_state.pending_question = "Give me a growth strategy based on this data"
 
 elif col6.button("🔥 Immediate actions"):
-    user_input = "What should I do TODAY to improve results?"
-
-
-
+    st.session_state.pending_question = "What should I do TODAY to improve results?"
 
 st.subheader("💬 Ask AI")
 
@@ -346,20 +336,23 @@ if st.session_state.analyzed:
     user_input = st.chat_input("Ask about your business")
 
     if user_input:
+        st.session_state.pending_question = user_input
 
-        st.session_state.chat_history.append({
-            "role": "user",
-            "content": user_input
-        })
+    if st.session_state.pending_question:
+
+        q = st.session_state.pending_question
+        st.session_state.pending_question = None
+
+        st.session_state.chat_history.append({"role": "user", "content": q})
 
         with st.chat_message("user"):
-            st.write(user_input)
+            st.write(q)
 
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
                 response = chat_with_data(
                     api_key,
-                    user_input,
+                    q,
                     st.session_state.chat_history[:-1],
                     st.session_state.model_card,
                     profile,
@@ -370,10 +363,7 @@ if st.session_state.analyzed:
                 )
                 st.write(response)
 
-        st.session_state.chat_history.append({
-            "role": "assistant",
-            "content": response
-        })
+        st.session_state.chat_history.append({"role": "assistant", "content": response})
 
 # ======================================================
 # ⚙️ TECHNICAL VIEW
@@ -381,26 +371,7 @@ if st.session_state.analyzed:
 with st.expander("⚙️ Technical Details"):
 
     st.markdown("### 🧠 Pipeline")
-    st.code("""
-Upload → Preprocess → Feature Engineering → AutoML → CV → SHAP → Insights → Chat
-""")
+    st.code("Upload → Preprocess → Feature Engineering → AutoML → SHAP → Insights → Chat")
 
     st.markdown("### 🤖 Model Info")
     st.write(st.session_state.model_card)
-
-    if st.session_state.model_card:
-
-        metrics = st.session_state.model_card.get("metrics", {})
-
-        if st.session_state.problem_type == "regression":
-            st.write("R²:", round(metrics.get("r2", 0), 4))
-            st.write("RMSE:", round(metrics.get("rmse", 0), 2))
-            st.write("MAE:", round(metrics.get("mae", 0), 2))
-        else:
-            st.write("Accuracy:", round(metrics.get("accuracy", 0), 4))
-            st.write("F1:", round(metrics.get("f1", 0), 4))
-
-        st.write("CV Mean:", round(metrics.get("cv_mean", 0), 4))
-        st.write("CV Std:", round(metrics.get("cv_std", 0), 4))
-    else:
-        st.info("Run analysis to see metrics")
