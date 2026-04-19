@@ -2,32 +2,45 @@ import pandas as pd
 import numpy as np
 
 
+# ======================================================
+# 🎯 MAIN FEATURE PIPELINE (FINAL)
+# ======================================================
 def prepare_features(df, profile, target_col, training=True, feature_schema=None):
     """
-    🐐 BUSINESS INSIGHTS PIPELINE (SHOPIFY READY)
+    🐐 BUSINESS-READY FEATURE PIPELINE
 
-    - No leakage
-    - No lag features
-    - No store memorization
-    - Focus on real business drivers
+    ✔ No leakage
+    ✔ Works for Shopify / Retail / Generic datasets
+    ✔ Keeps real business signals (orders, quantity, AOV)
+    ✔ Stable + production-safe
     """
 
     df = df.copy()
 
     # ======================================================
-    # 1. CLEAN
+    # 1. BASIC CLEAN
     # ======================================================
     df = df.replace([np.inf, -np.inf], np.nan)
 
     # ======================================================
-    # 2. DROP ID / NON-USEFUL / DOMINANT COLUMNS
+    # 2. VALIDATE TARGET
+    # ======================================================
+    if target_col not in df.columns:
+        return pd.DataFrame(), pd.Series()
+
+    df[target_col] = pd.to_numeric(df[target_col], errors="coerce")
+    df = df.dropna(subset=[target_col])
+
+    # ======================================================
+    # 3. DROP HIGH-RISK / ID COLUMNS
     # ======================================================
     drop_keywords = [
-        "id", "uuid", "invoice", "order",
-        "customer", "transaction", "row"
+        "id", "uuid", "invoice", "transaction",
+        "row", "index"
     ]
 
     drop_cols = []
+
     for col in df.columns:
         if col == target_col:
             continue
@@ -37,67 +50,81 @@ def prepare_features(df, profile, target_col, training=True, feature_schema=None
         if any(k in name for k in drop_keywords):
             drop_cols.append(col)
 
-        # 🔥 REMOVE STORE (CRITICAL FIX)
-        if col.lower() == "store":
+        # ❌ REMOVE STORE (prevents memorization)
+        if name == "store":
             drop_cols.append(col)
 
     df.drop(columns=drop_cols, errors="ignore", inplace=True)
 
     # ======================================================
-    # 3. DATE FEATURES (VERY IMPORTANT FOR SHOPIFY)
+    # 4. DATE FEATURE EXTRACTION (ROBUST)
     # ======================================================
+    date_col = None
+
     for col in df.columns:
         if col == target_col:
             continue
 
-        if df[col].dtype == "object":
-            parsed = pd.to_datetime(df[col], errors="coerce")
+        if "date" in col.lower():
+            date_col = col
+            break
 
-            if parsed.notna().mean() > 0.8:
+    if date_col:
+        parsed = pd.to_datetime(df[date_col], errors="coerce")
 
-                df["year"] = parsed.dt.year
-                df["month"] = parsed.dt.month
-                df["quarter"] = parsed.dt.quarter
-                df["dayofweek"] = parsed.dt.dayofweek
-                df["is_weekend"] = parsed.dt.dayofweek.isin([5, 6]).astype(int)
+        if parsed.notna().mean() > 0.7:
 
-                # 🔥 SEASONAL SIGNAL (important for sales)
-                df["month_sin"] = np.sin(2 * np.pi * df["month"] / 12)
-                df["month_cos"] = np.cos(2 * np.pi * df["month"] / 12)
+            df["year"] = parsed.dt.year
+            df["month"] = parsed.dt.month
+            df["dayofweek"] = parsed.dt.dayofweek
+            df["week"] = parsed.dt.isocalendar().week.astype(int)
 
-                df.drop(columns=[col], inplace=True)
-                break
+            df["is_weekend"] = parsed.dt.dayofweek.isin([5, 6]).astype(int)
+
+            # 🔥 SEASONAL ENCODING
+            df["month_sin"] = np.sin(2 * np.pi * df["month"] / 12)
+            df["month_cos"] = np.cos(2 * np.pi * df["month"] / 12)
+
+            df.drop(columns=[date_col], inplace=True)
 
     # ======================================================
-    # 4. SPLIT TARGET
+    # 5. SPLIT TARGET
     # ======================================================
-    if target_col not in df.columns:
-        return pd.DataFrame(), pd.Series()
-
-    y = pd.to_numeric(df[target_col], errors="coerce").fillna(0)
+    y = df[target_col]
     X = df.drop(columns=[target_col])
 
     # ======================================================
-    # 5. NUMERIC INTERACTIONS (LIMITED + FAST)
+    # 6. PRESERVE BUSINESS SIGNALS (CRITICAL)
     # ======================================================
-    numeric_cols = X.select_dtypes(include=np.number).columns.tolist()
-    numeric_cols = numeric_cols[:6]  # keep fast
+    # These columns = real drivers (DON'T DROP)
+    business_cols = ["Revenue", "Orders", "Quantity", "Avg_Order_Value"]
 
-    for i in range(len(numeric_cols)):
-        for j in range(i + 1, min(i + 3, len(numeric_cols))):
-            c1 = numeric_cols[i]
-            c2 = numeric_cols[j]
-            X[f"{c1}_x_{c2}"] = X[c1] * X[c2]
+    for col in business_cols:
+        if col in X.columns:
+            X[f"log_{col}"] = np.log1p(X[col].clip(lower=0))
 
     # ======================================================
-    # 6. LOG TRANSFORM (STABILIZE SALES DATA)
+    # 7. CONTROLLED INTERACTIONS (SMART)
     # ======================================================
+    important = [c for c in ["Orders", "Quantity", "Avg_Order_Value"] if c in X.columns]
+
+    if len(important) >= 2:
+        for i in range(len(important)):
+            for j in range(i + 1, len(important)):
+                c1 = important[i]
+                c2 = important[j]
+                X[f"{c1}_x_{c2}"] = X[c1] * X[c2]
+
+    # ======================================================
+    # 8. NUMERIC CLEAN
+    # ======================================================
+    numeric_cols = X.select_dtypes(include=np.number).columns
+
     for col in numeric_cols:
-        if (X[col] > 0).all():
-            X[f"log_{col}"] = np.log1p(X[col])
+        X[col] = pd.to_numeric(X[col], errors="coerce")
 
     # ======================================================
-    # 7. CATEGORICAL ENCODING (SAFE)
+    # 9. CATEGORICAL ENCODING (SAFE)
     # ======================================================
     cat_cols = X.select_dtypes(include="object").columns.tolist()
 
@@ -108,18 +135,22 @@ def prepare_features(df, profile, target_col, training=True, feature_schema=None
             X.drop(columns=[col], inplace=True)
 
     # ======================================================
-    # 8. FINAL CLEAN
+    # 10. FINAL CLEAN
     # ======================================================
-    X = X.apply(pd.to_numeric, errors="coerce").fillna(0)
+    X = X.fillna(0)
     X = X.replace([np.inf, -np.inf], 0)
 
     # ======================================================
-    # 9. SCHEMA ALIGNMENT (FOR PRODUCTION)
+    # 11. FEATURE SCHEMA ALIGNMENT (DEPLOYMENT SAFE)
     # ======================================================
-    if not training and feature_schema is not None:
-        for col in feature_schema:
-            if col not in X.columns:
-                X[col] = 0
-        X = X[feature_schema]
+    if training:
+        feature_schema = X.columns.tolist()
+
+    else:
+        if feature_schema is not None:
+            for col in feature_schema:
+                if col not in X.columns:
+                    X[col] = 0
+            X = X[feature_schema]
 
     return X, y
