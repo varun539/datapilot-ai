@@ -212,23 +212,123 @@ else:
         st.session_state.pending_question = None
 
 # ======================================================
-# 📊 TECHNICAL VIEW (HIDDEN)
+# # 📊 TECHNICAL VIEW (HIDDEN)
+# # ======================================================
+# with st.expander("⚙️ Technical Details (for advanced users)"):
+#     st.markdown("### Pipeline")
+#     st.code("""
+# Upload → Preprocess → Feature Engineering → AutoML → SHAP → Insights → Chat
+# """)
+
+#     st.markdown("### Model Info")
+#     st.write(st.session_state.model_card)
+
+#     if st.session_state.X is not None:
+#         st.markdown("### Features Used")
+#         st.write(st.session_state.X.columns.tolist())
+
+#     st.markdown("### Problem Type")
+#     st.write(st.session_state.problem_type)
+
+# ======================================================
+# 📊 TECHNICAL VIEW (ADVANCED)
 # ======================================================
 with st.expander("⚙️ Technical Details (for advanced users)"):
-    st.markdown("### Pipeline")
+
+    st.markdown("### 🧠 Pipeline")
     st.code("""
-Upload → Preprocess → Feature Engineering → AutoML → SHAP → Insights → Chat
+Upload → Adaptive Preprocess → Feature Engineering → AutoML → Cross Validation → SHAP → Insights → Chat
 """)
 
-    st.markdown("### Model Info")
+    # =========================
+    # MODEL INFO
+    # =========================
+    st.markdown("### 🤖 Model Info")
     st.write(st.session_state.model_card)
 
+    # =========================
+    # PROBLEM TYPE
+    # =========================
+    st.markdown("### 🧪 Problem Type")
+    st.write(st.session_state.problem_type)
+
+    # =========================
+    # FEATURES
+    # =========================
     if st.session_state.X is not None:
-        st.markdown("### Features Used")
+        st.markdown("### 📦 Features Used")
         st.write(st.session_state.X.columns.tolist())
 
-    st.markdown("### Problem Type")
-    st.write(st.session_state.problem_type)
+    # =========================
+    # METRICS
+    # =========================
+    st.markdown("### 📈 Performance Metrics")
+
+    try:
+        from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
+        from sklearn.metrics import accuracy_score, f1_score
+
+        model = st.session_state.model
+        X = st.session_state.X
+        y = st.session_state.y
+        problem = st.session_state.problem_type
+
+        preds = model.predict(X)
+
+        if problem == "regression":
+
+            r2 = r2_score(y, preds)
+            rmse = np.sqrt(mean_squared_error(y, preds))
+            mae = mean_absolute_error(y, preds)
+
+            st.write("R²:", round(r2, 4))
+            st.write("RMSE:", round(rmse, 2))
+            st.write("MAE:", round(mae, 2))
+
+            # Cross Validation
+            from sklearn.model_selection import KFold, cross_val_score
+
+            cv = KFold(n_splits=5, shuffle=True, random_state=42)
+            cv_scores = cross_val_score(model, X, y, cv=cv, scoring="r2")
+
+            st.write("CV Mean:", round(cv_scores.mean(), 4))
+            st.write("CV Std:", round(cv_scores.std(), 4))
+
+        else:
+
+            acc = accuracy_score(y, preds)
+            f1 = f1_score(y, preds)
+
+            st.write("Accuracy:", round(acc, 4))
+            st.write("F1 Score:", round(f1, 4))
+
+    except Exception as e:
+        st.warning(f"Metrics unavailable: {e}")
+
+    # =========================
+    # SHAP (ADVANCED)
+    # =========================
+    st.markdown("### 🔍 SHAP Explainability")
+
+    try:
+        explainer = shap.Explainer(model, X)
+        shap_values = explainer(X)
+
+        st.write("Top SHAP Features:")
+
+        mean_shap = np.abs(shap_values.values).mean(axis=0)
+        shap_importance = pd.Series(mean_shap, index=X.columns).sort_values(ascending=False)
+
+        st.write(shap_importance.head(10))
+
+        # Optional plot
+        st.markdown("#### SHAP Summary Plot")
+        st.pyplot(shap.summary_plot(shap_values, X, show=False))
+
+    except Exception as e:
+        st.warning(f"SHAP failed: {e}")
+
+
 
 # ======================================================
 # REPORT
