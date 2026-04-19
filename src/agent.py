@@ -3,6 +3,9 @@ import json
 import pandas as pd
 
 
+# ======================================================
+# INIT CLIENT
+# ======================================================
 def get_client(api_key: str) -> OpenAI:
     if not api_key:
         raise ValueError("OPENAI_API_KEY is missing")
@@ -10,100 +13,131 @@ def get_client(api_key: str) -> OpenAI:
 
 
 # ======================================================
-# GENERATE EXECUTIVE NARRATIVE
+# 💼 EXECUTIVE SUMMARY (PREMIUM STYLE)
 # ======================================================
 def generate_agent_narrative(
-    api_key, model_card, business_insights,
-    profile, shap_top_features, problem_type, target_col
+    api_key,
+    model_card,
+    business_insights,
+    profile,
+    shap_top_features,
+    problem_type,
+    target_col
 ) -> str:
 
     client = get_client(api_key)
 
+    model_card = model_card or {}
+    business_insights = business_insights or []
+    shap_top_features = shap_top_features or []
+
     context = f"""
-You are a senior business analyst advising a Shopify store owner or retail business.
-Write in plain English — NO jargon, NO technical ML terms.
+You are a senior business consultant advising an e-commerce or retail business owner.
 
-MODEL RESULTS:
-- Best Model: {(model_card or {}).get('model')}
-- Target: {target_col}
-- R² Score: {(model_card or {}).get('performance', {}).get('R² (CV)', 'N/A')}
-- Rows analyzed: {(model_card or {}).get('rows')}
+Write in SIMPLE English.
+NO technical terms.
+NO ML jargon.
 
-TOP FACTORS DRIVING {target_col}:
-{json.dumps(shap_top_features or [])}
+BUSINESS CONTEXT:
+- Target metric: {target_col}
+- Dataset size: {model_card.get('rows', 'unknown')}
 
-INSIGHTS FOUND:
-{chr(10).join(business_insights or [])}
+TOP DRIVERS:
+{json.dumps(shap_top_features)}
 
-Write a 150-word executive summary that:
-1. States what's driving sales in plain English
-2. Gives 2 concrete actions the business owner can take TODAY
-3. Mentions what to watch out for
+KEY INSIGHTS:
+{chr(10).join(business_insights)}
 
-Use simple language. No "R²", no "SHAP values", no ML terms.
-Talk like a business consultant, not a data scientist.
+Write a sharp executive summary:
+
+1. What is driving performance (plain English)
+2. What actions should be taken immediately (2–3)
+3. What risks to watch
+
+Keep it concise (~120–150 words).
+Make it sound like a paid consultant.
 """
 
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
-            {"role": "system", "content": "You are a business consultant advising retail store owners. Speak plainly and practically."},
+            {"role": "system", "content": "You are a senior business consultant."},
             {"role": "user", "content": context}
         ],
         temperature=0.4,
-        max_tokens=350
+        max_tokens=300
     )
+
     return response.choices[0].message.content
 
 
 # ======================================================
-# CHAT WITH DATA — Shopify/retail focused
+# 💬 CHAT WITH DATA (CONSULTANT MODE)
 # ======================================================
 def chat_with_data(
-    api_key, user_message, chat_history,
-    model_card, profile, df_sample,
-    problem_type, target_col, business_insights
+    api_key,
+    user_message,
+    chat_history,
+    model_card,
+    profile,
+    df_sample,
+    problem_type,
+    target_col,
+    business_insights
 ) -> str:
 
     client = get_client(api_key)
 
     if df_sample is None or df_sample.empty:
-        return "No dataset loaded. Please upload your data first."
+        return "No dataset loaded. Please upload data first."
 
-    insights_text = "\n".join(business_insights or []) or "No insights yet"
-    cols   = df_sample.columns.tolist()
-    sample = df_sample.head(3).to_dict()
+    chat_history = chat_history or []
+    business_insights = business_insights or []
+
+    cols = df_sample.columns.tolist()
+    sample = df_sample.head(3).to_string()
+
+    insights_text = "\n".join(business_insights) if business_insights else "No insights yet"
 
     system_prompt = f"""
-You are a business data analyst helping a retail or Shopify store owner understand their sales data.
+You are a senior business advisor (top consulting firm level).
 
-YOUR RULES:
-- Speak in plain English — no ML jargon
-- Be specific and actionable
-- Reference actual numbers from the data when possible
-- Never say "SHAP values", "R²", "model", "algorithm"
-- Think like a business consultant, not a data scientist
+STRICT RULES:
+- No technical jargon
+- No ML terms
+- No guessing
+- Only use provided data
 
-ALWAYS respond in this format:
+Always respond in this format:
 
-📊 What's happening:
-(1-2 sentences — what the data shows)
+📊 Insight:
+(what is happening)
 
-📉 Why:
-(1-2 sentences — the business reason)
+📉 Explanation:
+(why based on data)
 
-💡 What to do:
-(2-3 concrete actions)
+💡 Action:
+(what to do next — concrete steps)
 
-DATA CONTEXT:
-- Business target: {target_col}
-- Columns available: {cols}
-- Key findings: {insights_text}
-- Sample data: {sample}
+⚠️ Risk:
+(optional — what could go wrong)
+
+BUSINESS CONTEXT:
+Target: {target_col}
+Problem: {problem_type}
+
+Available columns:
+{cols}
+
+Key insights:
+{insights_text}
+
+Sample data:
+{sample}
 """
 
     messages = [{"role": "system", "content": system_prompt}]
-    messages.extend(chat_history or [])
+    messages.extend(chat_history)
     messages.append({"role": "user", "content": user_message})
 
     response = client.chat.completions.create(
@@ -115,26 +149,27 @@ DATA CONTEXT:
 
     reply = response.choices[0].message.content
 
+    # ✅ SAVE CHAT HISTORY SAFELY
     if isinstance(chat_history, list):
-        chat_history.append({"role": "user",      "content": user_message})
+        chat_history.append({"role": "user", "content": user_message})
         chat_history.append({"role": "assistant", "content": reply})
 
     return reply
 
 
 # ======================================================
-# SMART TARGET SUGGESTION
+# 🎯 SMART TARGET SELECTION
 # ======================================================
-def suggest_target_column(api_key, columns, df_sample) -> str:
+def suggest_target_column(api_key, columns, df_sample):
 
     if not columns:
         return None
 
-    # Priority list — no AI needed
     priority = [
-        "Weekly_Sales", "Sales", "Revenue", "Profit",
-        "Orders", "Conversions", "Target", "Price", "Churn"
+        "Revenue", "Sales", "Weekly_Sales",
+        "Profit", "Orders", "Churn"
     ]
+
     for col in priority:
         if col in columns:
             return col
@@ -142,41 +177,49 @@ def suggest_target_column(api_key, columns, df_sample) -> str:
     # AI fallback
     try:
         client = get_client(api_key)
-        prompt = f"""
-These are columns from a business dataset: {columns}
 
-Sample data:
+        prompt = f"""
+Columns: {columns}
+
+Sample:
 {df_sample.head(3).to_string()}
 
-Which column is the most likely business KPI to predict?
-Return ONLY the column name, nothing else.
+Which column is the main business metric?
+Return ONLY the column name.
 """
+
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
             temperature=0,
             max_tokens=20
         )
+
         result = response.choices[0].message.content.strip()
+
         return result if result in columns else columns[-1]
+
     except:
         return columns[-1]
 
 
 # ======================================================
-# DATASET DIAGNOSIS
+# 📊 DATA QUALITY ADVISOR
 # ======================================================
-def diagnose_dataset(api_key, profile, quality_score, quality_messages) -> str:
+def diagnose_dataset(api_key, profile, quality_score, quality_messages):
 
     client = get_client(api_key)
 
     prompt = f"""
-A business owner uploaded their sales data for analysis.
-Data quality score: {quality_score}/100
-Issues found: {quality_messages}
+A business owner uploaded their dataset.
 
-Give 3 short, plain-English tips to improve their data quality.
-No technical jargon. Talk like you're helping a small business owner.
+Quality score: {quality_score}/100
+Issues: {quality_messages}
+
+Give 3 simple, practical suggestions to improve their data.
+
+No technical language.
+Speak like a consultant helping a small business.
 """
 
     response = client.chat.completions.create(
@@ -185,4 +228,5 @@ No technical jargon. Talk like you're helping a small business owner.
         temperature=0.3,
         max_tokens=150
     )
+
     return response.choices[0].message.content
