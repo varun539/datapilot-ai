@@ -186,88 +186,72 @@ if st.button("🚀 Analyze"):
 # ======================================================
 # RESULTS + CHAT (FIXED STRUCTURE)
 # ======================================================
+# ======================================================
+# RESULTS + CHAT (FIXED STRUCTURE)
+# ======================================================
 if st.session_state.analyzed:
-
     # -------------------------
     # MODEL + INSIGHTS
     # -------------------------
     st.subheader("🏆 Model Summary")
     st.write(st.session_state.model_card)
-
     st.subheader("📊 Insights")
     for i in st.session_state.business_insights:
         st.info(i)
 
-    # -------------------------
-    # 💬 CHAT (INSIDE analyzed block ONLY)
-    # -------------------------
-     #  st.subheader("💬 Ask AI")
+    # =========================
+    # 💬 CHAT SECTION (NOW FIXED)
+    # =========================
     st.markdown('<div class="chat-container">', unsafe_allow_html=True)
-
     st.subheader("💬 Ask AI")
-
-    # INIT
-    if "chat_history" not in st.session_state:
-        st.session_state.chat_history = []
 
     # SHOW HISTORY FIRST
     for msg in st.session_state.chat_history:
         with st.chat_message(msg["role"]):
             st.write(msg["content"])
 
-    # QUICK BUTTONS (SET INPUT)
+    # QUICK BUTTONS
     st.markdown("### ⚡ Business Decisions")
-
     col1, col2, col3 = st.columns(3)
-
     btn_input = None
 
     if col1.button("📉 Why is revenue dropping?"):
         btn_input = "Why is revenue dropping and what should I fix immediately?"
-
     elif col2.button("💰 How to increase revenue fast?"):
         btn_input = "What actions will quickly increase revenue?"
-
     elif col3.button("⚠️ Biggest risk right now?"):
         btn_input = "What is the biggest business risk right now?"
 
     col4, col5, col6 = st.columns(3)
-
     if col4.button("🎯 Where to focus?"):
         btn_input = "Where should I focus for maximum impact?"
-
     elif col5.button("📈 Growth strategy"):
         btn_input = "Give me a growth strategy based on this data"
-
     elif col6.button("🔥 Immediate actions"):
         btn_input = "What should I do TODAY to improve results?"
 
-    # INPUT (chat OR button)
+    # CHAT INPUT
     user_input = st.chat_input("Ask about your business")
-
     if btn_input:
         user_input = btn_input
 
-    # PROCESS INPUT
+    # PROCESS INPUT (user or quick button)
     if user_input:
-
-        # ADD USER
+        # Add user message
         st.session_state.chat_history.append({
             "role": "user",
             "content": user_input
         })
-
         with st.chat_message("user"):
             st.write(user_input)
 
-        # AI RESPONSE
+        # Get AI response
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
-
                 response = chat_with_data(
                     api_key,
                     user_input,
-                    st.session_state.chat_history[:-1],  # IMPORTANT
+                    st.session_state.chat_history[:-1],   # previous history only (your agent expects this)
                     st.session_state.model_card,
                     profile,
                     st.session_state.processed_df,
@@ -275,55 +259,46 @@ if st.session_state.analyzed:
                     st.session_state.target_col,
                     st.session_state.business_insights
                 )
-
                 st.write(response)
 
-        # SAVE RESPONSE
+        # Save assistant message
         st.session_state.chat_history.append({
             "role": "assistant",
             "content": response
         })
-        st.markdown('</div>', unsafe_allow_html=True)
 
+    # 🔥 FIXED: close div on EVERY rerun
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # scroll to bottom only after new message
+    if user_input:
         st.markdown(
-        """
-        <script>
-        window.scrollTo(0, document.body.scrollHeight);
-        </script>
-        """,
-        unsafe_allow_html=True
-    )
+            """
+            <script>
+            window.scrollTo(0, document.body.scrollHeight);
+            </script>
+            """,
+            unsafe_allow_html=True
+        )
 
     # -------------------------
-    # 🚨 ALERTS (AFTER CHAT)
+    # 🚨 SMART ALERTS
     # -------------------------
     st.subheader("🚨 Smart Alerts")
-
-    df_disp = (
-        st.session_state.processed_df
-        if st.session_state.processed_df is not None
-        else df
-    )
-
+    df_disp = st.session_state.processed_df if st.session_state.processed_df is not None else df
     alerts = []
-
     if st.session_state.target_col in df_disp.columns:
         vals = df_disp[st.session_state.target_col].dropna()
-
         if len(vals) > 10:
             if vals.tail(5).mean() < vals.mean():
                 alerts.append("📉 Trend declining")
-
             if vals.std() > 0.5 * vals.mean():
                 alerts.append("⚠️ High volatility")
-
     if alerts:
         for a in alerts:
             st.error(a)
     else:
         st.success("✅ No major risks")
-
-
 
 
 # ======================================================
