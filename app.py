@@ -224,6 +224,32 @@ if st.session_state.analyzed:
 # ======================================================
 # 💬 CHAT (NO REFRESH BUG)
 # ======================================================
+
+st.markdown("### ⚡ Quick Business Questions")
+
+col1, col2, col3 = st.columns(3)
+
+if col1.button("📉 Why did revenue drop?"):
+    user_input = f"Why did {target} decrease recently?"
+
+elif col2.button("📊 What drives revenue?"):
+    user_input = f"What are the top drivers of {target}?"
+
+elif col3.button("📈 How to increase revenue?"):
+    user_input = f"What actions will increase {target}?"
+
+col4, col5, col6 = st.columns(3)
+
+if col4.button("⚠️ What risks exist?"):
+    user_input = "What risks or negative trends should I be aware of?"
+
+elif col5.button("🎯 Where should I focus?"):
+    user_input = "Where should I focus to maximize business impact?"
+
+elif col6.button("💰 Improve profitability"):
+    user_input = "How can I improve profitability based on this data?"
+
+
 st.subheader("💬 Ask AI")
 
 if st.session_state.analyzed:
