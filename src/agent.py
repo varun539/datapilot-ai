@@ -3,9 +3,6 @@ import json
 import pandas as pd
 
 
-# ======================================================
-# INIT CLIENT
-# ======================================================
 def get_client(api_key: str) -> OpenAI:
     if not api_key:
         raise ValueError("OPENAI_API_KEY is missing")
@@ -13,194 +10,155 @@ def get_client(api_key: str) -> OpenAI:
 
 
 # ======================================================
-# CORE: GENERATE AGENTIC NARRATIVE
+# GENERATE EXECUTIVE NARRATIVE
 # ======================================================
 def generate_agent_narrative(
-    api_key: str,
-    model_card: dict,
-    business_insights: list,
-    profile: dict,
-    shap_top_features: list,
-    problem_type: str,
-    target_col: str
+    api_key, model_card, business_insights,
+    profile, shap_top_features, problem_type, target_col
 ) -> str:
 
     client = get_client(api_key)
 
-    model_card = model_card or {}
-    business_insights = business_insights or []
-    shap_top_features = shap_top_features or []
-    profile = profile or {}
-
     context = f"""
-You are a senior business data scientist reviewing an AutoML analysis.
+You are a senior business analyst advising a Shopify store owner or retail business.
+Write in plain English — NO jargon, NO technical ML terms.
 
-MODEL CARD:
-- Model: {model_card.get('model')}
-- Problem Type: {problem_type}
+MODEL RESULTS:
+- Best Model: {(model_card or {}).get('model')}
 - Target: {target_col}
-- Rows: {model_card.get('rows')}
-- Features: {model_card.get('features')}
-- Performance: {json.dumps(model_card.get('performance', {}))}
+- R² Score: {(model_card or {}).get('performance', {}).get('R² (CV)', 'N/A')}
+- Rows analyzed: {(model_card or {}).get('rows')}
 
-TOP SHAP FEATURES:
-{json.dumps(shap_top_features)}
+TOP FACTORS DRIVING {target_col}:
+{json.dumps(shap_top_features or [])}
 
-DATASET PROFILE:
-- Numeric columns: {profile.get('numeric_cols', [])}
-- Categorical columns: {profile.get('categorical_cols', [])}
-- Missing values: {int(profile.get('missing', pd.Series()).sum()) if 'missing' in profile else 0}
-- Duplicates: {profile.get('duplicates', 0)}
+INSIGHTS FOUND:
+{chr(10).join(business_insights or [])}
 
-EXISTING INSIGHTS:
-{chr(10).join(business_insights)}
+Write a 150-word executive summary that:
+1. States what's driving sales in plain English
+2. Gives 2 concrete actions the business owner can take TODAY
+3. Mentions what to watch out for
 
-Write a concise business-level explanation (max 200 words).
+Use simple language. No "R²", no "SHAP values", no ML terms.
+Talk like a business consultant, not a data scientist.
 """
 
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
-            {"role": "system", "content": "You are a senior business data scientist."},
+            {"role": "system", "content": "You are a business consultant advising retail store owners. Speak plainly and practically."},
             {"role": "user", "content": context}
         ],
-        temperature=0.3,
-        max_tokens=300
+        temperature=0.4,
+        max_tokens=350
     )
-
     return response.choices[0].message.content
 
 
 # ======================================================
-# CHAT (CONSULTANT STYLE)
+# CHAT WITH DATA — Shopify/retail focused
 # ======================================================
 def chat_with_data(
-    api_key: str,
-    user_message: str,
-    chat_history: list,
-    model_card: dict,
-    profile: dict,
-    df_sample: pd.DataFrame,
-    problem_type: str,
-    target_col: str,
-    business_insights: list
+    api_key, user_message, chat_history,
+    model_card, profile, df_sample,
+    problem_type, target_col, business_insights
 ) -> str:
 
     client = get_client(api_key)
 
-    chat_history = chat_history or []
-    business_insights = business_insights or []
-
     if df_sample is None or df_sample.empty:
-        return "No dataset available. Please upload and analyze data first."
+        return "No dataset loaded. Please upload your data first."
 
-    cols = df_sample.columns.tolist()
+    insights_text = "\n".join(business_insights or []) or "No insights yet"
+    cols   = df_sample.columns.tolist()
     sample = df_sample.head(3).to_dict()
 
-    insights_text = "\n".join(business_insights) if business_insights else "No insights available"
-
     system_prompt = f"""
-You are a senior business data analyst and strategy consultant.
+You are a business data analyst helping a retail or Shopify store owner understand their sales data.
 
-STRICT RULES:
-- Only use the provided dataset context
-- Do NOT hallucinate
-- Be concise and professional
+YOUR RULES:
+- Speak in plain English — no ML jargon
+- Be specific and actionable
+- Reference actual numbers from the data when possible
+- Never say "SHAP values", "R²", "model", "algorithm"
+- Think like a business consultant, not a data scientist
 
-Always respond in this structure:
+ALWAYS respond in this format:
 
-📊 Insight:
-(what is happening)
+📊 What's happening:
+(1-2 sentences — what the data shows)
 
-📉 Explanation:
-(why based on data)
+📉 Why:
+(1-2 sentences — the business reason)
 
-💡 Action:
-(what should be done)
+💡 What to do:
+(2-3 concrete actions)
 
-CONTEXT:
-Target: {target_col}
-Problem: {problem_type}
-
-Columns:
-{cols}
-
-Model insights:
-{insights_text}
-
-Sample data:
-{sample}
+DATA CONTEXT:
+- Business target: {target_col}
+- Columns available: {cols}
+- Key findings: {insights_text}
+- Sample data: {sample}
 """
 
     messages = [{"role": "system", "content": system_prompt}]
-    messages.extend(chat_history)
+    messages.extend(chat_history or [])
     messages.append({"role": "user", "content": user_message})
 
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=messages,
         temperature=0.3,
-        max_tokens=300
+        max_tokens=350
     )
 
     reply = response.choices[0].message.content
 
-    chat_history.append({"role": "user", "content": user_message})
-    chat_history.append({"role": "assistant", "content": reply})
+    if isinstance(chat_history, list):
+        chat_history.append({"role": "user",      "content": user_message})
+        chat_history.append({"role": "assistant", "content": reply})
 
     return reply
 
 
 # ======================================================
-# TARGET SUGGESTION (🔥 FIXED PROPERLY)
+# SMART TARGET SUGGESTION
 # ======================================================
-def suggest_target_column(api_key: str, columns: list, df_sample: pd.DataFrame) -> str:
+def suggest_target_column(api_key, columns, df_sample) -> str:
 
     if not columns:
         return None
 
-    # =========================
-    # 🔥 PRIORITY RULES (NO AI NEEDED FIRST)
-    # =========================
-    priority_targets = [
-        "Weekly_Sales",
-        "Sales",
-        "Revenue",
-        "Target",
-        "Price"
+    # Priority list — no AI needed
+    priority = [
+        "Weekly_Sales", "Sales", "Revenue", "Profit",
+        "Orders", "Conversions", "Target", "Price", "Churn"
     ]
-
-    for col in columns:
-        if col in priority_targets:
+    for col in priority:
+        if col in columns:
             return col
 
-    # =========================
-    # 🤖 FALLBACK TO AI
-    # =========================
+    # AI fallback
     try:
         client = get_client(api_key)
-
         prompt = f"""
-Columns: {columns}
+These are columns from a business dataset: {columns}
 
-Sample:
+Sample data:
 {df_sample.head(3).to_string()}
 
-Pick the most likely business target variable.
-Return ONLY column name.
+Which column is the most likely business KPI to predict?
+Return ONLY the column name, nothing else.
 """
-
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
             temperature=0,
-            max_tokens=30
+            max_tokens=20
         )
-
         result = response.choices[0].message.content.strip()
-
         return result if result in columns else columns[-1]
-
     except:
         return columns[-1]
 
@@ -208,27 +166,23 @@ Return ONLY column name.
 # ======================================================
 # DATASET DIAGNOSIS
 # ======================================================
-def diagnose_dataset(
-    api_key: str,
-    profile: dict,
-    quality_score: int,
-    quality_messages: list
-) -> str:
+def diagnose_dataset(api_key, profile, quality_score, quality_messages) -> str:
 
     client = get_client(api_key)
 
     prompt = f"""
-Score: {quality_score}/100
-Issues: {quality_messages}
+A business owner uploaded their sales data for analysis.
+Data quality score: {quality_score}/100
+Issues found: {quality_messages}
 
-Give 3 short actionable insights.
+Give 3 short, plain-English tips to improve their data quality.
+No technical jargon. Talk like you're helping a small business owner.
 """
 
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[{"role": "user", "content": prompt}],
         temperature=0.3,
-        max_tokens=120
+        max_tokens=150
     )
-
     return response.choices[0].message.content
