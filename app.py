@@ -66,39 +66,63 @@ if df is None:
     st.stop()
 
 # ======================================================
+# 🧠 DATA DETECTION
+# ======================================================
+columns_str = " ".join(df.columns).lower()
+has_customer = "customer" in columns_str
+
+st.sidebar.markdown("### 🧠 Data Detection")
+if has_customer:
+    st.sidebar.success("👤 Customer-level data")
+else:
+    st.sidebar.warning("📊 Aggregated data (no churn available)")
+
+# ======================================================
 # MODE
 # ======================================================
 st.subheader("🎯 Choose Analysis Type")
 
-mode = st.selectbox(
-    "Analysis Mode",
-    ["🧠 CEO Dashboard", "📊 Revenue Analysis", "👤 Churn Analysis", "🔢 Custom"]
-)
+options = ["🧠 CEO Dashboard", "📊 Revenue Analysis"]
+if has_customer:
+    options.append("👤 Churn Analysis")
+options.append("🔢 Custom")
+
+mode = st.selectbox("Analysis Mode", options)
 
 # ======================================================
-# CEO DASHBOARD
+# 🧠 CEO DASHBOARD
 # ======================================================
 if mode == "🧠 CEO Dashboard":
 
     revenue_df = adaptive_preprocess(df, "revenue")
-    churn_df = adaptive_preprocess(df, "churn")
+
+    try:
+        if has_customer:
+            churn_df = adaptive_preprocess(df, "churn")
+            churn_available = True
+        else:
+            raise ValueError()
+    except:
+        churn_available = False
+        churn_df = None
 
     total_revenue = revenue_df["Revenue"].sum()
     total_orders = revenue_df["Orders"].sum()
     aov = total_revenue / max(total_orders, 1)
-    churn_rate = churn_df["churn"].mean()
+
+    churn_rate = churn_df["churn"].mean() if churn_available else None
 
     st.markdown("## 🧠 CEO Dashboard")
 
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Revenue", f"${total_revenue:,.0f}")
     c2.metric("Orders", int(total_orders))
-    c3.metric("Churn Rate", f"{churn_rate*100:.1f}%")
+    c3.metric("Churn Rate", f"{churn_rate*100:.1f}%" if churn_rate is not None else "N/A")
     c4.metric("AOV", f"${aov:.2f}")
 
     st.divider()
 
-    if churn_rate > 0.4:
+    if churn_rate and churn_rate > 0.4:
         st.error("⚠️ High churn is hurting growth")
     elif total_revenue < revenue_df["Revenue"].median():
         st.warning("📉 Revenue unstable")
@@ -106,11 +130,18 @@ if mode == "🧠 CEO Dashboard":
         st.success("🚀 Business healthy")
 
     st.markdown("### 💡 CEO Actions")
-    st.success("""
+
+    if churn_available:
+        st.success("""
 👉 Reduce churn  
-👉 Increase repeat purchases  
+👉 Improve retention campaigns  
+👉 Focus on repeat customers  
+""")
+    else:
+        st.info("""
+👉 Upload customer-level data for churn insights  
+👉 Focus on increasing orders  
 👉 Optimize pricing  
-👉 Focus on high-value customers  
 """)
 
     st.stop()
@@ -123,6 +154,11 @@ if mode == "📊 Revenue Analysis":
     target = "Revenue"
 
 elif mode == "👤 Churn Analysis":
+
+    if not has_customer:
+        st.error("❌ Churn requires customer data")
+        st.stop()
+
     processed_df = adaptive_preprocess(df, "churn")
     target = "churn"
 
@@ -145,7 +181,6 @@ if st.button("🚀 Analyze"):
     results, best_model, metrics = train_models(X, y, problem)
     model = joblib.load("models/best_model.pkl")
 
-    # SHAP
     try:
         sample_X = X.sample(min(500, len(X)))
         explainer = shap.Explainer(model, sample_X)
@@ -193,7 +228,6 @@ st.subheader("💬 Ask AI")
 
 if st.session_state.analyzed:
 
-    # show history
     for msg in st.session_state.chat_history:
         with st.chat_message(msg["role"]):
             st.write(msg["content"])
@@ -231,7 +265,7 @@ if st.session_state.analyzed:
         })
 
 # ======================================================
-# ⚙️ TECHNICAL VIEW (HIDDEN)
+# ⚙️ TECHNICAL VIEW
 # ======================================================
 with st.expander("⚙️ Technical Details"):
 
@@ -257,6 +291,5 @@ Upload → Preprocess → Feature Engineering → AutoML → CV → SHAP → Ins
 
         st.write("CV Mean:", round(metrics.get("cv_mean", 0), 4))
         st.write("CV Std:", round(metrics.get("cv_std", 0), 4))
-
     else:
         st.info("Run analysis to see metrics")
