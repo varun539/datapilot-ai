@@ -200,63 +200,89 @@ if st.session_state.analyzed:
 
 # ======================================================
 # CHAT
+# # ==========================================
+
+
 # ======================================================
-st.markdown("### ⚡ Business Decisions")
-
-quick = [
-    "Why is revenue dropping?",
-    "How to increase revenue fast?",
-    "Biggest risk right now?",
-    "Where to focus?",
-    "Growth strategy",
-    "What should I do today?"
-]
-
-cols = st.columns(3)
-
-for i, q in enumerate(quick):
-    if cols[i % 3].button(q):
-        st.session_state.pending_question = q
-
+# 💬 CHAT (FINAL FIX)
+# ======================================================
 st.subheader("💬 Ask AI")
 
 if st.session_state.analyzed:
 
+    # INIT
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = []
+
+    # SHOW HISTORY FIRST
     for msg in st.session_state.chat_history:
         with st.chat_message(msg["role"]):
             st.write(msg["content"])
 
-    user_input = st.chat_input("Ask something")
+    # USER INPUT
+    user_input = st.chat_input("Ask about your business")
 
+    # QUICK BUTTONS (NO pending_question anymore)
+    st.markdown("### ⚡ Business Decisions")
+
+    col1, col2, col3 = st.columns(3)
+
+    if col1.button("📉 Why is revenue dropping?"):
+        user_input = "Why is revenue dropping and what should I fix immediately?"
+
+    elif col2.button("💰 How to increase revenue fast?"):
+        user_input = "What actions will quickly increase revenue?"
+
+    elif col3.button("⚠️ Biggest risk right now?"):
+        user_input = "What is the biggest business risk right now?"
+
+    col4, col5, col6 = st.columns(3)
+
+    if col4.button("🎯 Where to focus?"):
+        user_input = "Where should I focus for maximum impact?"
+
+    elif col5.button("📈 Growth strategy"):
+        user_input = "Give me a growth strategy based on this data"
+
+    elif col6.button("🔥 Immediate actions"):
+        user_input = "What should I do TODAY to improve results?"
+
+    # PROCESS INPUT
     if user_input:
-        st.session_state.pending_question = user_input
 
-    if st.session_state.pending_question:
-
-        q = st.session_state.pending_question
-        st.session_state.pending_question = None
-
-        st.session_state.chat_history.append({"role": "user", "content": q})
+        # ADD USER
+        st.session_state.chat_history.append({
+            "role": "user",
+            "content": user_input
+        })
 
         with st.chat_message("user"):
-            st.write(q)
+            st.write(user_input)
 
+        # AI RESPONSE
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
                 response = chat_with_data(
                     api_key,
-                    q,
-                    st.session_state.chat_history[:-1],
+                    user_input,
+                    st.session_state.chat_history[:-1],  # IMPORTANT
                     st.session_state.model_card,
                     profile,
                     st.session_state.processed_df,
                     st.session_state.problem_type,
-                    target,
+                    st.session_state.target_col,
                     st.session_state.business_insights
                 )
                 st.write(response)
 
-        st.session_state.chat_history.append({"role": "assistant", "content": response})
+        # SAVE RESPONSE
+        st.session_state.chat_history.append({
+            "role": "assistant",
+            "content": response
+        })
+
+
+
 
 # ======================================================
 # TECHNICAL
