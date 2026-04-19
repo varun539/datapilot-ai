@@ -5,7 +5,7 @@ import numpy as np
 
 from sklearn.model_selection import train_test_split, cross_val_score, KFold, StratifiedKFold
 from sklearn.metrics import (
-    accuracy_score, precision_score, recall_score, f1_score,
+    accuracy_score, f1_score,
     r2_score, mean_absolute_error, mean_squared_error
 )
 
@@ -29,14 +29,22 @@ def detect_problem_type(y):
 
 
 # ======================================================
-# 🤖 TRAIN MODELS (FINAL VERSION)
+# 🤖 TRAIN MODELS (FINAL CLEAN VERSION)
 # ======================================================
 def train_models(X, y, problem_type, handle_imbalance=False):
 
-    results = []
+    # 🔒 SAFETY
+    if len(X) < 20:
+        raise ValueError("Dataset too small for training")
+
+    if y.nunique() <= 1:
+        raise ValueError("Target has no variance")
+
+    if X.shape[1] == 0:
+        raise ValueError("No features after preprocessing")
 
     # =========================
-    # TRAIN / TEST SPLIT
+    # SPLIT
     # =========================
     X_train, X_test, y_train, y_test = train_test_split(
         X, y,
@@ -45,36 +53,18 @@ def train_models(X, y, problem_type, handle_imbalance=False):
         stratify=y if problem_type == "classification" else None
     )
 
-    best_score = -np.inf
-    best_model = None
-    best_model_name = None
-    best_metrics = {}
-
     # =========================
-    # CV STRATEGY
+    # CV
     # =========================
     if problem_type == "classification":
         cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
     else:
         cv = KFold(n_splits=5, shuffle=True, random_state=42)
 
-    # =========================
-    # CLASS WEIGHT
-    # =========================
-    class_weight = None
-    scale_pos_weight = 1.0
-    catboost_weights = None
-
-    if problem_type == "classification" and handle_imbalance:
-        classes = np.unique(y_train)
-        weights = compute_class_weight("balanced", classes=classes, y=y_train)
-        class_weight = dict(zip(classes, weights))
-        catboost_weights = [class_weight[c] for c in classes]
-
-        if len(classes) == 2:
-            neg = np.sum(y_train == classes[0])
-            pos = np.sum(y_train == classes[1])
-            scale_pos_weight = neg / max(pos, 1)
+    best_score = -np.inf
+    best_model = None
+    best_name = None
+    best_metrics = {}
 
     # ======================================================
     # MODELS
@@ -82,11 +72,11 @@ def train_models(X, y, problem_type, handle_imbalance=False):
     if problem_type == "classification":
 
         models = {
-            "Random Forest": RandomForestClassifier(n_estimators=200, class_weight=class_weight),
+            "Random Forest": RandomForestClassifier(n_estimators=200, random_state=42),
             "Gradient Boosting": GradientBoostingClassifier(),
-            "XGBoost": XGBClassifier(n_estimators=200, eval_metric="logloss", scale_pos_weight=scale_pos_weight),
-            "LightGBM": LGBMClassifier(n_estimators=200, class_weight=class_weight),
-            "CatBoost": CatBoostClassifier(iterations=200, verbose=False, class_weights=catboost_weights)
+            "XGBoost": XGBClassifier(n_estimators=200, eval_metric="logloss", random_state=42),
+            "LightGBM": LGBMClassifier(n_estimators=200, random_state=42),
+            "CatBoost": CatBoostClassifier(iterations=200, verbose=False, random_state=42)
         }
 
         for name, model in models.items():
@@ -97,37 +87,27 @@ def train_models(X, y, problem_type, handle_imbalance=False):
             acc = accuracy_score(y_test, preds)
             f1 = f1_score(y_test, preds, average="weighted", zero_division=0)
 
-            # CV
-            cv_scores = cross_val_score(model, X, y, cv=cv, scoring="f1_weighted")
-
-            results.append({
-                "Model": name,
-                "Accuracy": round(acc, 4),
-                "F1": round(f1, 4),
-                "CV Mean": round(cv_scores.mean(), 4),
-                "CV Std": round(cv_scores.std(), 4)
-            })
+            # ✅ CV ONLY ON TRAIN
+            cv_scores = cross_val_score(model, X_train, y_train, cv=cv, scoring="f1_weighted")
 
             if f1 > best_score:
                 best_score = f1
                 best_model = model
-                best_model_name = name
+                best_name = name
 
                 best_metrics = {
-                    "accuracy": acc,
-                    "f1": f1,
-                    "cv_mean": cv_scores.mean(),
-                    "cv_std": cv_scores.std()
+                    "holdout": {"accuracy": acc, "f1": f1},
+                    "cv": {"mean": cv_scores.mean(), "std": cv_scores.std()}
                 }
 
     else:
 
         models = {
-            "Random Forest": RandomForestRegressor(n_estimators=200),
+            "Random Forest": RandomForestRegressor(n_estimators=200, random_state=42),
             "Gradient Boosting": GradientBoostingRegressor(),
-            "XGBoost": XGBRegressor(n_estimators=200),
-            "LightGBM": LGBMRegressor(n_estimators=200),
-            "CatBoost": CatBoostRegressor(iterations=200, verbose=False)
+            "XGBoost": XGBRegressor(n_estimators=200, random_state=42),
+            "LightGBM": LGBMRegressor(n_estimators=200, random_state=42),
+            "CatBoost": CatBoostRegressor(iterations=200, verbose=False, random_state=42)
         }
 
         for name, model in models.items():
@@ -139,29 +119,17 @@ def train_models(X, y, problem_type, handle_imbalance=False):
             mae = mean_absolute_error(y_test, preds)
             rmse = np.sqrt(mean_squared_error(y_test, preds))
 
-            # CV
-            cv_scores = cross_val_score(model, X, y, cv=cv, scoring="r2")
-
-            results.append({
-                "Model": name,
-                "R2": round(r2, 4),
-                "MAE": round(mae, 2),
-                "RMSE": round(rmse, 2),
-                "CV Mean": round(cv_scores.mean(), 4),
-                "CV Std": round(cv_scores.std(), 4)
-            })
+            # ✅ CV ONLY ON TRAIN
+            cv_scores = cross_val_score(model, X_train, y_train, cv=cv, scoring="r2")
 
             if r2 > best_score:
                 best_score = r2
                 best_model = model
-                best_model_name = name
+                best_name = name
 
                 best_metrics = {
-                    "r2": r2,
-                    "mae": mae,
-                    "rmse": rmse,
-                    "cv_mean": cv_scores.mean(),
-                    "cv_std": cv_scores.std()
+                    "holdout": {"r2": r2, "mae": mae, "rmse": rmse},
+                    "cv": {"mean": cv_scores.mean(), "std": cv_scores.std()}
                 }
 
     # =========================
@@ -169,8 +137,8 @@ def train_models(X, y, problem_type, handle_imbalance=False):
     # =========================
     os.makedirs("models", exist_ok=True)
 
-    if best_model is not None:
-        joblib.dump(best_model, "models/best_model.pkl")
-        joblib.dump(X.columns.tolist(), "models/feature_columns.pkl")
+    joblib.dump(best_model, "models/best_model.pkl")
+    joblib.dump(X.columns.tolist(), "models/features.pkl")
+    joblib.dump(best_metrics, "models/metrics.pkl")
 
-    return pd.DataFrame(results), best_model_name, best_metrics
+    return best_model, best_name, best_metrics
