@@ -18,6 +18,23 @@ from src.adaptive_preprocess import adaptive_preprocess
 st.set_page_config(page_title="DataAgentX", layout="wide")
 api_key = st.secrets.get("OPENAI_API_KEY", None) or os.getenv("OPENAI_API_KEY")
 
+st.markdown("""
+<style>
+.block-container {
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+}
+
+.chat-container {
+    position: sticky;
+    bottom: 0;
+    background-color: #0e1117;
+    padding-top: 10px;
+    z-index: 999;
+}
+</style>
+""", unsafe_allow_html=True)
+
 # ======================================================
 # SESSION STATE
 # ======================================================
@@ -184,6 +201,9 @@ if st.session_state.analyzed:
     # -------------------------
     # 💬 CHAT (INSIDE analyzed block ONLY)
     # -------------------------
+     #  st.subheader("💬 Ask AI")
+    st.markdown('<div class="chat-container">', unsafe_allow_html=True)
+
     st.subheader("💬 Ask AI")
 
     # INIT
@@ -263,6 +283,16 @@ if st.session_state.analyzed:
             "role": "assistant",
             "content": response
         })
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        st.markdown(
+        """
+        <script>
+        window.scrollTo(0, document.body.scrollHeight);
+        </script>
+        """,
+        unsafe_allow_html=True
+    )
 
     # -------------------------
     # 🚨 ALERTS (AFTER CHAT)
