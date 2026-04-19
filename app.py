@@ -4,6 +4,14 @@ import numpy as np
 import shap
 import os
 
+# from src.pipeline import prepare_features
+# from src.automl import detect_problem_type, train_models
+# from src.impact import generate_business_impact
+# from src.agent import chat_with_data
+# from src.eda import basic_profile
+# from src.adaptive_preprocess import adaptive_preprocess
+
+
 from src.pipeline import prepare_features
 from src.automl import detect_problem_type, train_models
 from src.impact import generate_business_impact
@@ -142,9 +150,26 @@ if st.button("🚀 Run Analysis"):
 # ======================================================
 # RESULTS
 # ======================================================
+# ======================================================
+# RESULTS
+# ======================================================
+if st.session_state.analyzed:
+
+    mc = st.session_state.model_card
+    metrics = mc.get("metrics", {})
+
     hold = metrics.get("holdout", {})
     cv   = metrics.get("cv", {})
-    
+
+    st.divider()
+    st.subheader("🏆 Model Summary")
+
+    c1, c2 = st.columns(2)
+    c1.metric("Model", mc.get("model", "-"))
+    c2.metric("Features", mc.get("features", "-"))
+
+    st.subheader("📈 Metrics")
+
     if st.session_state.problem_type == "regression":
         st.write(f"R²: {round(hold.get('r2', 0), 4)}")
         st.write(f"MAE: {round(hold.get('mae', 0), 2)}")
@@ -152,10 +177,14 @@ if st.button("🚀 Run Analysis"):
     else:
         st.write(f"Accuracy: {round(hold.get('accuracy', 0), 4)}")
         st.write(f"F1 Score: {round(hold.get('f1', 0), 4)}")
-    
+
     st.write(f"CV Mean: {round(cv.get('mean', 0), 4)}")
     st.write(f"CV Std: {round(cv.get('std', 0), 4)}")
-    
+
+    # INSIGHTS
+    st.subheader("📊 Business Insights")
+    for ins in st.session_state.business_insights:
+        st.info(ins)
 
     # ======================================================
     # INSIGHTS
