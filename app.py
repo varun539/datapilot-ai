@@ -206,6 +206,10 @@ else:
 # ======================================================
 # TECHNICAL VIEW
 # ======================================================
+
+# ======================================================
+# TECHNICAL VIEW
+# ======================================================
 with st.expander("⚙️ Technical Details"):
 
     st.markdown("### 🧠 Pipeline")
@@ -218,22 +222,24 @@ Upload → Adaptive Preprocess → Feature Engineering → AutoML → CV → SHA
 
     st.markdown("### 📈 Metrics")
 
-    metrics = st.session_state.model_card.get("metrics", {})
+    if st.session_state.model_card is not None:
 
-    if st.session_state.problem_type == "regression":
-        st.write("R²:", round(metrics.get("r2", 0), 4))
-        st.write("RMSE:", round(metrics.get("rmse", 0), 2))
-        st.write("MAE:", round(metrics.get("mae", 0), 2))
+        metrics = st.session_state.model_card.get("metrics", {})
+
+        if st.session_state.problem_type == "regression":
+            st.write("R²:", round(metrics.get("r2", 0), 4))
+            st.write("RMSE:", round(metrics.get("rmse", 0), 2))
+            st.write("MAE:", round(metrics.get("mae", 0), 2))
+        else:
+            st.write("Accuracy:", round(metrics.get("accuracy", 0), 4))
+            st.write("F1:", round(metrics.get("f1", 0), 4))
+
+        st.write("CV Mean:", round(metrics.get("cv_mean", 0), 4))
+        st.write("CV Std:", round(metrics.get("cv_std", 0), 4))
+
     else:
-        st.write("Accuracy:", round(metrics.get("accuracy", 0), 4))
-        st.write("F1:", round(metrics.get("f1", 0), 4))
+        st.info("Run analysis to see metrics")
 
-    st.write("CV Mean:", round(metrics.get("cv_mean", 0), 4))
-    st.write("CV Std:", round(metrics.get("cv_std", 0), 4))
-
-    if st.session_state.X is not None:
-        st.markdown("### 📦 Features")
-        st.write(st.session_state.X.columns.tolist())
 
 # ======================================================
 # REPORT
