@@ -11,7 +11,7 @@ from src.impact import generate_business_impact
 from src.agent import chat_with_data
 from src.eda import basic_profile
 from src.adaptive_preprocess import adaptive_preprocess
-
+from src.leakage import detect_leakage
 # ======================================================
 # CONFIG
 # ======================================================
@@ -91,6 +91,24 @@ st.session_state.target_col = target
 # ======================================================
 # ANALYZE
 # ======================================================
+# BEFORE train_models()
+
+warnings, high_risk = detect_leakage(X, y)
+
+st.subheader("🛡️ Data Leakage Check")
+
+for w in warnings:
+    if "HIGH RISK" in w:
+        st.error(w)
+    elif "Suspicious" in w:
+        st.warning(w)
+    else:
+        st.success(w)
+
+# STOP if dangerous
+if high_risk:
+    st.error("❌ Training stopped due to potential data leakage")
+    st.stop()
 if st.button("🚀 Run Analysis"):
     with st.spinner("Training models..."):
         try:
