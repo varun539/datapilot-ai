@@ -49,7 +49,7 @@ def basic_profile(df):
         if df_copy[col].dtype == "object":
             parsed = pd.to_datetime(
                 df_copy[col], errors="coerce",
-                dayfirst=True, infer_datetime_format=True
+                dayfirst=True
             )
             if parsed.notna().mean() > 0.7:
                 df_copy[col] = parsed
