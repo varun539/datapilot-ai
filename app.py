@@ -188,30 +188,85 @@ if st.session_state.analyzed:
 
 # ======================================================
 # SIMPLE CHAT (RECRUITER SAFE)
+# # ======================================================
+# st.divider()
+# st.subheader("💬 Ask Questions About Your Data")
+
+# if st.session_state.analyzed:
+
+#     user_input = st.text_input("Ask a question")
+
+#     if user_input:
+
+#         response = chat_with_data(
+#             api_key,
+#             user_input,
+#             [],
+#             st.session_state.model_card,
+#             profile,
+#             st.session_state.processed_df,
+#             st.session_state.problem_type,
+#             st.session_state.target_col,
+#             st.session_state.business_insights
+#         )
+
+#         st.write(response)
+
+
+# ======================================================
+# 💬 CHAT (FIXED + WORKING)
 # ======================================================
 st.divider()
 st.subheader("💬 Ask Questions About Your Data")
 
 if st.session_state.analyzed:
 
-    user_input = st.text_input("Ask a question")
+    # INIT
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = []
+
+    # SHOW HISTORY
+    for msg in st.session_state.chat_history:
+        with st.chat_message(msg["role"]):
+            st.write(msg["content"])
+
+    # INPUT
+    user_input = st.chat_input("Ask about your business...")
 
     if user_input:
 
-        response = chat_with_data(
-            api_key,
-            user_input,
-            [],
-            st.session_state.model_card,
-            profile,
-            st.session_state.processed_df,
-            st.session_state.problem_type,
-            st.session_state.target_col,
-            st.session_state.business_insights
-        )
+        # SAVE USER
+        st.session_state.chat_history.append({
+            "role": "user",
+            "content": user_input
+        })
 
-        st.write(response)
+        with st.chat_message("user"):
+            st.write(user_input)
 
+        # AI RESPONSE
+        with st.chat_message("assistant"):
+            with st.spinner("Thinking..."):
+
+                response = chat_with_data(
+                    api_key,
+                    user_input,
+                    st.session_state.chat_history[:-1],  # important
+                    st.session_state.model_card,
+                    profile,
+                    st.session_state.processed_df,
+                    st.session_state.problem_type,
+                    st.session_state.target_col,
+                    st.session_state.business_insights
+                )
+
+                st.write(response)
+
+        # SAVE RESPONSE
+        st.session_state.chat_history.append({
+            "role": "assistant",
+            "content": response
+        })
 # ======================================================
 # TECHNICAL VIEW
 # ======================================================
