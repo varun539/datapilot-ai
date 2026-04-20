@@ -1,17 +1,19 @@
 import pandas as pd
+import numpy as np
 import joblib
 import os
-import numpy as np
 
-from sklearn.model_selection import train_test_split, cross_val_score, TimeSeriesSplit, StratifiedKFold
+from sklearn.model_selection import train_test_split, TimeSeriesSplit
 from sklearn.metrics import (
     accuracy_score, f1_score,
     r2_score, mean_absolute_error, mean_squared_error
 )
+
 from sklearn.ensemble import (
     RandomForestClassifier, RandomForestRegressor,
     GradientBoostingClassifier, GradientBoostingRegressor
 )
+
 from xgboost import XGBRegressor, XGBClassifier
 from lightgbm import LGBMRegressor, LGBMClassifier
 from catboost import CatBoostRegressor, CatBoostClassifier
@@ -23,103 +25,107 @@ def detect_problem_type(y):
 
 def train_models(X, y, problem_type):
 
-    # Safety checks
     if len(X) < 30:
-        raise ValueError("Dataset too small — need at least 30 rows")
-    if y.nunique() <= 1:
-        raise ValueError("Target has no variance")
-    if X.shape[1] == 0:
-        raise ValueError("No features available")
+        raise ValueError("Dataset too small")
 
-    # Split
     if problem_type == "regression":
-        split_idx = int(len(X) * 0.8)
-        X_train, X_test = X.iloc[:split_idx], X.iloc[split_idx:]
-        y_train, y_test = y.iloc[:split_idx], y.iloc[split_idx:]
+        split = int(len(X) * 0.8)
+        X_train, X_test = X.iloc[:split], X.iloc[split:]
+        y_train, y_test = y.iloc[:split], y.iloc[split:]
     else:
         X_train, X_test, y_train, y_test = train_test_split(
             X, y, test_size=0.2, random_state=42, stratify=y
         )
 
-    # CV strategy
-    if problem_type == "classification":
-        cv      = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-        scoring = "f1_weighted"
+    # CV
+    if problem_type == "regression":
+        cv = TimeSeriesSplit(n_splits=5)
     else:
-        cv      = TimeSeriesSplit(n_splits=5)
-        scoring = "r2"
+        cv = 5
 
     # Models
-    if problem_type == "classification":
+    if problem_type == "regression":
         models = {
-            "Random Forest":    RandomForestClassifier(n_estimators=200, random_state=42),
-            "Gradient Boosting":GradientBoostingClassifier(),
-            "XGBoost":          XGBClassifier(n_estimators=200, eval_metric="logloss", random_state=42),
-            "LightGBM":         LGBMClassifier(n_estimators=200, random_state=42, verbose=-1),
-            "CatBoost":         CatBoostClassifier(iterations=200, verbose=False, random_state=42)
+            "XGBoost": XGBRegressor(n_estimators=200),
+            "LightGBM": LGBMRegressor(n_estimators=200),
+            "CatBoost": CatBoostRegressor(iterations=200, verbose=False),
         }
     else:
         models = {
-            "Random Forest":    RandomForestRegressor(n_estimators=200, random_state=42),
-            "Gradient Boosting":GradientBoostingRegressor(),
-            "XGBoost":          XGBRegressor(n_estimators=200, random_state=42),
-            "LightGBM":         LGBMRegressor(n_estimators=200, random_state=42, verbose=-1),
-            "CatBoost":         CatBoostRegressor(iterations=200, verbose=False, random_state=42)
+            "XGBoost": XGBClassifier(n_estimators=200, eval_metric="logloss"),
+            "LightGBM": LGBMClassifier(n_estimators=200),
+            "CatBoost": CatBoostClassifier(iterations=200, verbose=False),
         }
 
-    # Train + evaluate
-    results      = []   # ← track all models for comparison table
-    best_score   = -np.inf
-    best_model   = None
-    best_name    = None
+    best_score = -np.inf
+    best_model = None
+    best_name = None
     best_metrics = {}
+    results = []
 
     for name, model in models.items():
+
         try:
             model.fit(X_train, y_train)
             preds = model.predict(X_test)
 
+            # HOLDOUT
             if problem_type == "regression":
-                r2   = r2_score(y_test, preds)
-                mae  = mean_absolute_error(y_test, preds)
-                rmse = np.sqrt(mean_squared_error(y_test, preds))
-                holdout = {"r2": r2, "mae": mae, "rmse": rmse}
-                score   = r2
+                score = r2_score(y_test, preds)
+                holdout = {
+                    "r2": score,
+                    "mae": mean_absolute_error(y_test, preds),
+                    "rmse": np.sqrt(mean_squared_error(y_test, preds))
+                }
             else:
-                acc  = accuracy_score(y_test, preds)
-                f1   = f1_score(y_test, preds, average="weighted", zero_division=0)
-                holdout = {"accuracy": acc, "f1": f1}
-                score   = f1
+                score = f1_score(y_test, preds, average="weighted")
+                holdout = {
+                    "accuracy": accuracy_score(y_test, preds),
+                    "f1": score
+                }
 
-            cv_scores  = cross_val_score(model, X_train, y_train, cv=cv, scoring=scoring)
-            cv_metrics = {"mean": cv_scores.mean(), "std": cv_scores.std()}
+            # MANUAL CV (SAFE)
+            cv_scores = []
 
-            # Track for comparison table
+            if problem_type == "regression":
+                for tr_idx, val_idx in cv.split(X_train):
+                    X_tr, X_val = X_train.iloc[tr_idx], X_train.iloc[val_idx]
+                    y_tr, y_val = y_train.iloc[tr_idx], y_train.iloc[val_idx]
+
+                    model.fit(X_tr, y_tr)
+                    pred = model.predict(X_val)
+                    cv_scores.append(r2_score(y_val, pred))
+
+            else:
+                from sklearn.model_selection import cross_val_score
+                cv_scores = cross_val_score(model, X_train, y_train, cv=5, scoring="f1_weighted")
+
+            cv_mean = np.mean(cv_scores)
+            cv_std = np.std(cv_scores)
+
             results.append({
-                "Model":   name,
-                "Score":   round(score, 4),
-                "CV Mean": round(cv_metrics["mean"], 4),
-                "CV Std":  round(cv_metrics["std"],  4),
+                "Model": name,
+                "Score": round(score, 4),
+                "CV Mean": round(cv_mean, 4),
+                "CV Std": round(cv_std, 4)
             })
 
             if score > best_score:
-                best_score   = score
-                best_model   = model
-                best_name    = name
-                best_metrics = {"holdout": holdout, "cv": cv_metrics}
+                best_score = score
+                best_model = model
+                best_name = name
+                best_metrics = {
+                    "holdout": holdout,
+                    "cv": {"mean": cv_mean, "std": cv_std}
+                }
 
-        except Exception as e:
-            results.append({"Model": name, "Score": "failed", "CV Mean": "-", "CV Std": "-"})
+        except:
             continue
 
     if best_model is None:
-        raise ValueError("All models failed to train")
+        raise ValueError("All models failed")
 
-    # Save
     os.makedirs("models", exist_ok=True)
     joblib.dump(best_model, "models/best_model.pkl")
-    joblib.dump(X.columns.tolist(), "models/features.pkl")
-    joblib.dump(best_metrics, "models/metrics.pkl")
 
-    # Returns: (comparison_df, best_name, metrics_dict)
     return pd.DataFrame(results), best_name, best_metrics
