@@ -252,10 +252,15 @@ def prepare_features(df, profile, target_col, training=True, feature_schema=None
     # 5. SORT BY TIME
     # ======================================================
     sort_cols = [c for c in ["year", "week", "month"] if c in df.columns]
+    # if "Store" in df.columns:
+    #     sort_cols = ["Store"] + sort_cols
+    # if sort_cols:
+
     if "Store" in df.columns:
-        sort_cols = ["Store"] + sort_cols
-    if sort_cols:
-        df = df.sort_values(sort_cols).reset_index(drop=True)
+    df = df.sort_values(["Store"] + sort_cols).reset_index(drop=True)
+    else:
+    df = df.sort_values(sort_cols).reset_index(drop=True)
+    #     df = df.sort_values(sort_cols).reset_index(drop=True)
 
     # ======================================================
     # 6. SMART LAG FEATURES — based on detected frequency
