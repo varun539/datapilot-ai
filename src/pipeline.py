@@ -238,11 +238,16 @@ def prepare_features(df, profile, target_col, training=True, feature_schema=None
                 # Detect frequency: weekly vs daily
                 date_range_days = (parsed.max() - parsed.min()).days
                 n_rows = len(df)
-                rows_per_day = n_rows / max(date_range_days, 1)
+                # rows_per_day = n_rows / max(date_range_days, 1)
 
-                # If <0.5 rows per day → weekly/monthly data
-                is_weekly = rows_per_day < 0.5
-
+                # # If <0.5 rows per day → weekly/monthly data
+                # is_weekly = rows_per_day < 0.5
+                if date_range_days > 365 and n_rows < 200:
+                     is_weekly = True
+                else:
+                     is_weekly = False
+                
+                                
                 df.drop(columns=[col], inplace=True)
                 break
         except Exception:
