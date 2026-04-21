@@ -490,7 +490,9 @@ if st.button("🚀 Run Analysis"):
             y = y.iloc[:min_len].reset_index(drop=True)
 
             st.info(f"✅ Features ready: {X.shape[1]} features, {len(y)} rows")
-            st.write("**Features used:**", list(X.columns))
+            # st.write("**Features used:**", list(X.columns))
+            display_cols = [c for c in X.columns if not c.startswith("lag_")]
+            st.write("Key features:", display_cols[:10])
 
             # Train
             problem = detect_problem_type(y)
