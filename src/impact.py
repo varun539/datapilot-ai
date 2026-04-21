@@ -28,6 +28,16 @@ def generate_business_impact(shap_values, X, problem_type, target_col):
         feat_idx = X.columns.get_loc(feat)
         avg_effect = shap_values[:, feat_idx].mean()
 
+
+        def clean_feature_name(feat):
+        if "lag_" in feat:
+            return "recent sales trend"
+        if feat == "sales_momentum":
+            return "sales growth trend"
+        if feat == "volatility":
+            return "sales variability"
+        return feat
+
         # Direction from SHAP (primary signal)
         if abs(avg_effect) < 1e-4:
             direction = "has minimal impact on"
