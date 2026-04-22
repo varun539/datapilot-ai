@@ -161,8 +161,6 @@
 
 
 
-
-
 import pandas as pd
 import numpy as np
 from sklearn.feature_selection import VarianceThreshold
@@ -171,11 +169,9 @@ from sklearn.feature_selection import VarianceThreshold
 def prepare_features(df, profile, target_col, training=True, feature_schema=None):
     """
     PRODUCTION PIPELINE — Zero Leakage, Real Business Logic
-
-    Smart detection:
-    - Daily data   → lag_7, lag_14 (days)
-    - Weekly data  → lag_2, lag_4  (weeks)
-    - Auto-detects frequency from row count vs date range
+    - Daily data   → lag_7, lag_14
+    - Weekly data  → lag_2, lag_4
+    - Auto-detects frequency from date range vs row count
     """
 
     df = df.copy()
@@ -186,31 +182,32 @@ def prepare_features(df, profile, target_col, training=True, feature_schema=None
     df = df.replace([np.inf, -np.inf], np.nan)
 
     # ======================================================
-    # 2. DROP PURE ID COLUMNS ONLY
-    # Keep Store! It has business signal via encoding
+    # 2. DROP PURE ID COLUMNS
     # ======================================================
     id_keywords = ["uuid", "invoice_no", "transaction_id", "row_id"]
     drop_cols = [
         c for c in df.columns
-        if c != target_col and
-        c.lower() in id_keywords
+        if c != target_col and c.lower() in id_keywords
     ]
     df.drop(columns=drop_cols, errors="ignore", inplace=True)
 
     # ======================================================
     # 3. DROP TARGET-DERIVED LEAKY COLUMNS
-    # Avg_Order_Value = Revenue/Orders = pure leakage
     # ======================================================
-    leaky = ["Avg_Order_Value", "avg_order_value",
-             "revenue_per_order", "sales_per_order"]
-    df.drop(columns=[c for c in leaky if c in df.columns and c != target_col],
-            errors="ignore", inplace=True)
+    leaky = [
+        "Avg_Order_Value", "avg_order_value",
+        "revenue_per_order", "sales_per_order"
+    ]
+    df.drop(
+        columns=[c for c in leaky if c in df.columns and c != target_col],
+        errors="ignore", inplace=True
+    )
 
     # ======================================================
-    # 4. DATE FEATURES + DETECT DATA FREQUENCY
+    # 4. DATE FEATURES + DETECT FREQUENCY
     # ======================================================
     date_col  = None
-    is_weekly = False  # flag for lag logic
+    is_weekly = False
 
     for col in list(df.columns):
         if col == target_col:
@@ -229,64 +226,49 @@ def prepare_features(df, profile, target_col, training=True, feature_schema=None
                 df["is_q4"]      = (parsed.dt.quarter == 4).astype(int)
                 df["is_q1"]      = (parsed.dt.quarter == 1).astype(int)
 
-                # Cyclic encoding — better seasonality
-                df["month_sin"]  = np.sin(2 * np.pi * df["month"] / 12)
-                df["month_cos"]  = np.cos(2 * np.pi * df["month"] / 12)
-                df["week_sin"]   = np.sin(2 * np.pi * df["week"]  / 52)
-                df["week_cos"]   = np.cos(2 * np.pi * df["week"]  / 52)
+                # Cyclic encoding
+                df["month_sin"] = np.sin(2 * np.pi * df["month"] / 12)
+                df["month_cos"] = np.cos(2 * np.pi * df["month"] / 12)
+                df["week_sin"]  = np.sin(2 * np.pi * df["week"]  / 52)
+                df["week_cos"]  = np.cos(2 * np.pi * df["week"]  / 52)
 
-                # Detect frequency: weekly vs daily
-                date_range_days = (parsed.max() - parsed.min()).days
+                # Detect weekly vs daily
+                date_range_days = max((parsed.max() - parsed.min()).days, 1)
                 n_rows = len(df)
-                # rows_per_day = n_rows / max(date_range_days, 1)
+                is_weekly = (date_range_days > 365 and n_rows < 500)
 
-                # # If <0.5 rows per day → weekly/monthly data
-                # is_weekly = rows_per_day < 0.5
-                if date_range_days > 365 and n_rows < 200:
-                     is_weekly = True
-                else:
-                     is_weekly = False
-                
-                                
                 df.drop(columns=[col], inplace=True)
                 break
         except Exception:
             continue
 
     # ======================================================
-    # 5. SORT BY TIME
+    # 5. SORT BY TIME (with Store grouping if exists)
     # ======================================================
     sort_cols = [c for c in ["year", "week", "month"] if c in df.columns]
-    # if "Store" in df.columns:
-    #     sort_cols = ["Store"] + sort_cols
-    # if sort_cols:
 
-    if "Store" in df.columns:
-    df = df.sort_values(["Store"] + sort_cols).reset_index(drop=True)
-    else:
-    df = df.sort_values(sort_cols).reset_index(drop=True)
-    #     df = df.sort_values(sort_cols).reset_index(drop=True)
+    if "Store" in df.columns and sort_cols:
+        df = df.sort_values(["Store"] + sort_cols).reset_index(drop=True)
+    elif sort_cols:
+        df = df.sort_values(sort_cols).reset_index(drop=True)
 
     # ======================================================
-    # 6. SMART LAG FEATURES — based on detected frequency
+    # 6. SMART LAG FEATURES — no leakage
     # ======================================================
     if date_col and target_col in df.columns and len(df) > 30:
 
         group_col = "Store" if "Store" in df.columns else None
 
-        if is_weekly:
-            # Weekly data: lag_2 = 2 weeks ago, lag_4 = 1 month ago
-            lag_a, lag_b = 2, 4
-        else:
-            # Daily data: lag_7 = 1 week ago, lag_14 = 2 weeks ago
-            lag_a, lag_b = 7, 14
+        # Weekly → lag_2 (2wk), lag_4 (1mo)
+        # Daily  → lag_7 (1wk), lag_14 (2wk)
+        lag_a, lag_b = (2, 4) if is_weekly else (7, 14)
 
         if group_col:
             grp = df.groupby(group_col)[target_col]
-            df[f"lag_{lag_a}"] = grp.shift(lag_a)
-            df[f"lag_{lag_b}"] = grp.shift(lag_b)
-            df["sales_momentum"] = df[f"lag_{lag_a}"] - df[f"lag_{lag_b}"]
-            df["volatility"] = (
+            df[f"lag_{lag_a}"]     = grp.shift(lag_a)
+            df[f"lag_{lag_b}"]     = grp.shift(lag_b)
+            df["sales_momentum"]   = df[f"lag_{lag_a}"] - df[f"lag_{lag_b}"]
+            df["volatility"]       = (
                 grp.shift(lag_a)
                 .rolling(lag_a, min_periods=2)
                 .std()
@@ -294,10 +276,10 @@ def prepare_features(df, profile, target_col, training=True, feature_schema=None
                 .reset_index(level=0, drop=True)
             )
         else:
-            df[f"lag_{lag_a}"] = df[target_col].shift(lag_a)
-            df[f"lag_{lag_b}"] = df[target_col].shift(lag_b)
+            df[f"lag_{lag_a}"]   = df[target_col].shift(lag_a)
+            df[f"lag_{lag_b}"]   = df[target_col].shift(lag_b)
             df["sales_momentum"] = df[f"lag_{lag_a}"] - df[f"lag_{lag_b}"]
-            df["volatility"] = (
+            df["volatility"]     = (
                 df[target_col]
                 .shift(lag_a)
                 .rolling(lag_a, min_periods=2)
@@ -306,7 +288,7 @@ def prepare_features(df, profile, target_col, training=True, feature_schema=None
             )
 
     # ======================================================
-    # 7. DROP NaN ROWS
+    # 7. DROP NaN
     # ======================================================
     df = df.dropna(subset=[target_col]).reset_index(drop=True)
 
@@ -318,17 +300,12 @@ def prepare_features(df, profile, target_col, training=True, feature_schema=None
 
     # ======================================================
     # 9. ENCODE CATEGORICALS
-    # Store gets label-encoded (ordinal) — keeps signal!
     # ======================================================
     for col in X.select_dtypes(include="object").columns.tolist():
-        n_unique = X[col].nunique()
-        if n_unique <= 20:
+        if X[col].nunique() <= 20:
             X = pd.get_dummies(X, columns=[col], drop_first=True)
         else:
             X.drop(columns=[col], inplace=True)
-
-    # Integer columns (like Store) → keep as-is, they're numeric
-    # ======================================================
 
     # ======================================================
     # 10. FINAL CLEAN
@@ -339,9 +316,9 @@ def prepare_features(df, profile, target_col, training=True, feature_schema=None
     # Remove zero-variance columns
     if X.shape[1] > 0:
         try:
-            sel = VarianceThreshold(threshold=0.0)
+            sel   = VarianceThreshold(threshold=0.0)
             X_arr = sel.fit_transform(X)
-            X = pd.DataFrame(X_arr, columns=X.columns[sel.get_support()])
+            X     = pd.DataFrame(X_arr, columns=X.columns[sel.get_support()])
         except Exception:
             pass
 
